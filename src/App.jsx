@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, Mail, BarChart3, 
-  Upload, Settings as SettingsIcon, AlertCircle, ShieldAlert 
+  Upload, Settings as SettingsIcon, AlertCircle, ShieldAlert, Search 
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -11,6 +11,7 @@ import Templates from './components/Templates';
 import Analytics from './components/Analytics';
 import CSVImporter from './components/CSVImporter';
 import Settings from './components/Settings';
+import LeadFinder from './components/LeadFinder';
 
 import { initialCompanies, initialContacts, initialTemplates } from './mockData';
 
@@ -18,12 +19,20 @@ export default function App() {
   // --- Local Storage Hydration ---
   const [contacts, setContacts] = useState(() => {
     const local = localStorage.getItem('crm_contacts');
-    return local ? JSON.parse(local) : initialContacts;
+    if (local) {
+      const parsed = JSON.parse(local);
+      return parsed.filter(c => !['ct1', 'ct2', 'ct3', 'ct4', 'ct5', 'ct6', 'ct7', 'ct8'].includes(c.id));
+    }
+    return [];
   });
 
   const [companies, setCompanies] = useState(() => {
     const local = localStorage.getItem('crm_companies');
-    return local ? JSON.parse(local) : initialCompanies;
+    if (local) {
+      const parsed = JSON.parse(local);
+      return parsed.filter(c => !['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9', 'ca', 'cb', 'cc', 'cd', 'ce', 'cf'].includes(c.id));
+    }
+    return [];
   });
 
   const [templates, setTemplates] = useState(() => {
@@ -50,6 +59,10 @@ export default function App() {
   const [profile, setProfile] = useState(() => {
     const local = localStorage.getItem('crm_profile');
     return local ? JSON.parse(local) : { name: 'Tejith Chennuru', university: 'Computer Science Student', portfolio: '' };
+  });
+
+  const [resumeText, setResumeText] = useState(() => {
+    return localStorage.getItem('crm_resume_text') || '';
   });
 
   const [selectedTab, setSelectedTab] = useState('dashboard');
@@ -98,6 +111,10 @@ export default function App() {
     localStorage.setItem('crm_google_client_id', googleClientId);
   }, [googleClientId]);
 
+  useEffect(() => {
+    localStorage.setItem('crm_resume_text', resumeText);
+  }, [resumeText]);
+
   const resetDatabase = () => {
     localStorage.removeItem('crm_contacts');
     localStorage.removeItem('crm_companies');
@@ -107,13 +124,14 @@ export default function App() {
     localStorage.removeItem('crm_gemini_api_key');
     localStorage.removeItem('crm_ai_provider');
     localStorage.removeItem('crm_openai_model');
+    localStorage.removeItem('crm_google_client_id');
+    localStorage.removeItem('crm_resume_text');
   };
 
   const handleSetTab = (tab) => {
     setSelectedTab(tab);
   };
 
-  // Determine if active API credentials are present based on provider selection
   const isApiConfigured = () => {
     if (aiProvider === 'gemini') return !!geminiApiKey;
     if (aiProvider === 'openai') return !!apiKey;
@@ -149,6 +167,12 @@ export default function App() {
               onClick={() => setSelectedTab('contacts')}
             >
               <Users /> Contacts
+            </li>
+            <li 
+              className={`sidebar-item ${selectedTab === 'finder' ? 'active' : ''}`}
+              onClick={() => setSelectedTab('finder')}
+            >
+              <Search /> Lead Finder
             </li>
             <li 
               className={`sidebar-item ${selectedTab === 'companies' ? 'active' : ''}`}
@@ -197,7 +221,7 @@ export default function App() {
             </div>
           )}
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', paddingBottom: '4px' }}>
-            Outreach Platform v1.2.0
+            Outreach Platform v1.3.0
           </div>
         </div>
       </aside>
@@ -224,6 +248,7 @@ export default function App() {
             aiProvider={aiProvider}
             openAiModel={openAiModel}
             profile={profile}
+            resumeText={resumeText}
             setTab={handleSetTab}
             selectedContactForEmail={selectedContactForEmail}
             setSelectedContactForEmail={setSelectedContactForEmail}
@@ -231,6 +256,13 @@ export default function App() {
             setStatusFilter={setStatusFilter}
             gmailToken={gmailToken}
             setGmailToken={setGmailToken}
+          />
+        )}
+        {selectedTab === 'finder' && (
+          <LeadFinder 
+            contacts={contacts} 
+            setContacts={setContacts} 
+            setTab={handleSetTab}
           />
         )}
         {selectedTab === 'companies' && (
@@ -270,6 +302,8 @@ export default function App() {
             setOpenAiModel={setOpenAiModel} 
             profile={profile}
             setProfile={setProfile}
+            resumeText={resumeText}
+            setResumeText={setResumeText}
             resetDatabase={resetDatabase}
             googleClientId={googleClientId}
             setGoogleClientId={setGoogleClientId}

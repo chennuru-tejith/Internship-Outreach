@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, ShieldAlert } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, FileText } from 'lucide-react';
 
 export default function Settings({ 
   apiKey, 
@@ -12,6 +12,8 @@ export default function Settings({
   setOpenAiModel, 
   profile, 
   setProfile, 
+  resumeText,
+  setResumeText,
   resetDatabase,
   googleClientId,
   setGoogleClientId,
@@ -27,6 +29,7 @@ export default function Settings({
   const [localModel, setLocalModel] = useState(openAiModel);
   const [localProfile, setLocalProfile] = useState({ ...profile });
   const [localGoogleClientId, setLocalGoogleClientId] = useState(googleClientId);
+  const [localResumeText, setLocalResumeText] = useState(resumeText);
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e) => {
@@ -37,6 +40,7 @@ export default function Settings({
     setOpenAiModel(localModel);
     setProfile(localProfile);
     setGoogleClientId(localGoogleClientId);
+    setResumeText(localResumeText);
     
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -197,6 +201,24 @@ export default function Settings({
             <strong>Local Substitution Mode Active:</strong> This mode will compile your outreach drafts instantly on your machine for free, by replacing tags like <code>[Contact Name]</code>, <code>[Company Name]</code>, and <code>[Your Name]</code> with actual lead data. No internet or API keys are required.
           </div>
         )}
+
+        {/* Resume & Qualifications Section */}
+        <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
+          <FileText size={18} /> Resume & Qualifications Context
+        </h2>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Paste Your Resume or Key Achievements</label>
+          <textarea 
+            className="form-textarea" 
+            style={{ minHeight: '160px' }}
+            placeholder="Paste your qualifications, skills, projects, and work experience here. When the AI personalized email is drafted, it will read this background to pitch you perfectly to target recruiters!"
+            value={localResumeText}
+            onChange={(e) => setLocalResumeText(e.target.value)}
+          />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+            Providing resume context ensures AI drafts feature your actual achievements instead of generic placeholders.
+          </span>
+        </div>
 
         {/* Google OAuth Direct Send Section */}
         <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>

@@ -353,8 +353,11 @@ export default function Contacts({
         - Name: ${profile.name}
         - University/School: ${profile.university}
         - Portfolio link: ${profile.portfolio || 'None'}
+        - Resume/Qualifications context: ${resumeText || 'None supplied'}
 
-        Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic:
+        Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic.
+        If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
+
         Subject Template: ${template.subject}
         Body Template: ${template.body}
 
@@ -432,8 +435,11 @@ export default function Contacts({
         Sender's Name: ${profile.name}
         Sender's University: ${profile.university}
         Sender's Portfolio: ${profile.portfolio || 'None'}
+        Sender's Resume/Qualifications context: ${resumeText || 'None supplied'}
         
-        We want to use this outreach template as inspiration, but customize it so it sounds completely natural, non-generic, highly personalized, and direct:
+        We want to use this outreach template as inspiration, but customize it so it sounds completely natural, non-generic, highly personalized, and direct.
+        If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
+
         Subject Template: ${template?.subject || 'Outreach'}
         Body Template: ${template?.body || 'Hello...'}
 
