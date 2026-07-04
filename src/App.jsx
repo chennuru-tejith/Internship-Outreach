@@ -35,6 +35,14 @@ export default function App() {
     return localStorage.getItem('crm_api_key') || '';
   });
 
+  const [geminiApiKey, setGeminiApiKey] = useState(() => {
+    return localStorage.getItem('crm_gemini_api_key') || '';
+  });
+
+  const [aiProvider, setAiProvider] = useState(() => {
+    return localStorage.getItem('crm_ai_provider') || 'gemini'; // default is gemini (free tier)
+  });
+
   const [openAiModel, setOpenAiModel] = useState(() => {
     return localStorage.getItem('crm_openai_model') || 'gpt-4o-mini';
   });
@@ -65,6 +73,14 @@ export default function App() {
   }, [apiKey]);
 
   useEffect(() => {
+    localStorage.setItem('crm_gemini_api_key', geminiApiKey);
+  }, [geminiApiKey]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_ai_provider', aiProvider);
+  }, [aiProvider]);
+
+  useEffect(() => {
     localStorage.setItem('crm_openai_model', openAiModel);
   }, [openAiModel]);
 
@@ -78,12 +94,27 @@ export default function App() {
     localStorage.removeItem('crm_templates');
     localStorage.removeItem('crm_profile');
     localStorage.removeItem('crm_api_key');
+    localStorage.removeItem('crm_gemini_api_key');
+    localStorage.removeItem('crm_ai_provider');
     localStorage.removeItem('crm_openai_model');
   };
 
-  // Switch tabs helper if click from action feeds
   const handleSetTab = (tab) => {
     setSelectedTab(tab);
+  };
+
+  // Determine if active API credentials are present based on provider selection
+  const isApiConfigured = () => {
+    if (aiProvider === 'gemini') return !!geminiApiKey;
+    if (aiProvider === 'openai') return !!apiKey;
+    return true; // Local requires no key
+  };
+
+  const getApiStatusLabel = () => {
+    if (aiProvider === 'local') return 'Offline Compiler Active';
+    if (aiProvider === 'gemini') return geminiApiKey ? 'Gemini API: Active' : 'Gemini Key: Missing';
+    if (aiProvider === 'openai') return apiKey ? 'OpenAI API: Active' : 'OpenAI Key: Missing';
+    return 'AI Status: Configured';
   };
 
   return (
@@ -144,19 +175,19 @@ export default function App() {
 
         {/* Sidebar Footer */}
         <div className="sidebar-footer">
-          {apiKey ? (
-            <div className="key-badge">
+          {isApiConfigured() ? (
+            <div className="key-badge" onClick={() => setSelectedTab('settings')} style={{ cursor: 'pointer' }}>
               <ShieldAlert size={14} />
-              <span>OpenAI API Key: Active</span>
+              <span>{getApiStatusLabel()}</span>
             </div>
           ) : (
             <div className="key-badge missing" onClick={() => setSelectedTab('settings')} style={{ cursor: 'pointer' }}>
               <AlertCircle size={14} />
-              <span>OpenAI API Key: Missing</span>
+              <span>{getApiStatusLabel()}</span>
             </div>
           )}
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', paddingBottom: '4px' }}>
-            Outreach Platform v1.1.0
+            Outreach Platform v1.2.0
           </div>
         </div>
       </aside>
@@ -178,7 +209,10 @@ export default function App() {
             companies={companies} 
             templates={templates} 
             apiKey={apiKey}
+            geminiApiKey={geminiApiKey}
+            aiProvider={aiProvider}
             openAiModel={openAiModel}
+            profile={profile}
             setTab={handleSetTab}
             selectedContactForEmail={selectedContactForEmail}
             setSelectedContactForEmail={setSelectedContactForEmail}
@@ -213,6 +247,10 @@ export default function App() {
           <Settings 
             apiKey={apiKey} 
             setApiKey={setApiKey} 
+            geminiApiKey={geminiApiKey}
+            setGeminiApiKey={setGeminiApiKey}
+            aiProvider={aiProvider}
+            setAiProvider={setAiProvider}
             openAiModel={openAiModel} 
             setOpenAiModel={setOpenAiModel} 
             profile={profile}

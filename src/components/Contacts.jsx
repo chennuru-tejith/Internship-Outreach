@@ -28,7 +28,10 @@ export default function Contacts({
   companies, 
   templates, 
   apiKey, 
+  geminiApiKey,
+  aiProvider,
   openAiModel, 
+  profile,
   setTab,
   selectedContactForEmail,
   setSelectedContactForEmail
@@ -76,6 +79,35 @@ export default function Contacts({
     return d.toISOString().split('T')[0];
   };
 
+  // Compile local offline templates
+  const compileLocalTemplate = (template, contact, userProfile) => {
+    if (!template) return { subject: 'Outreach', body: 'Hello...' };
+    
+    let subject = template.subject || '';
+    let body = template.body || '';
+
+    const replacements = {
+      '\\[Contact Name\\]': contact.name || '',
+      '\\[Contact Title\\]': contact.title || 'Recruiter',
+      '\\[Company Name\\]': contact.company || 'Company',
+      '\\[Found Via\\]': contact.foundVia || 'LinkedIn Outreach',
+      '\\[Your Name\\]': userProfile.name || 'Tejith Chennuru',
+      '\\[Your University\\]': userProfile.university || 'University Student',
+      '\\[Your School\\]': userProfile.university || 'University Student',
+      '\\[Portfolio Link\\]': userProfile.portfolio || 'github.com/my-profile',
+      '\\[Project Link\\]': userProfile.portfolio || 'github.com/my-profile',
+      '\\[Position Name\\]': contact.title ? `${contact.title} Internship` : 'Software Engineering Intern',
+    };
+
+    Object.entries(replacements).forEach(([placeholder, value]) => {
+      const regex = new RegExp(placeholder, 'gi');
+      subject = subject.replace(regex, value);
+      body = body.replace(regex, value);
+    });
+
+    return { subject, body };
+  };
+
   const handleOpenAddModal = () => {
     setEditingContact(null);
     setFormData({
@@ -121,24 +153,18 @@ export default function Contacts({
   const handleSubmit = (e) => {
     e.preventDefault();
     if (editingContact) {
-      // Edit
       setContacts(contacts.map(c => {
-        if (c.id === editingContact.id) {
-          // If status changes to Email Sent, stamp followUpDate to +7 days
-          let followUp = formData.followUpDate;
-          if (formData.status === 'Email Sent' && c.status !== 'Email Sent') {
-            followUp = getSevenDaysLater();
-          }
-          return { 
-            ...c, 
-            ...formData, 
-            followUpDate: followUp 
-          };
+        let followUp = formData.followUpDate;
+        if (formData.status === 'Email Sent' && c.status !== 'Email Sent') {
+          followUp = getSevenDaysLater();
         }
-        return c;
+        return { 
+          ...c, 
+          ...formData, 
+          followUpDate: followUp 
+        };
       }));
     } else {
-      // Add
       const newContact = {
         id: 'ct_' + Math.random().toString(36).substr(2, 9),
         ...formData,
@@ -153,7 +179,6 @@ export default function Contacts({
     setShowAddEditModal(false);
   };
 
-  // Open LinkedIn, change status to Sent, auto-date stamp followUp to 7 days
   const handleOpenLinkedIn = (contact) => {
     if (contact.linkedin) {
       window.open(contact.linkedin, '_blank');
@@ -172,7 +197,6 @@ export default function Contacts({
     }
   };
 
-  // Open Gmail Compose, change status to Sent, auto-date stamp followUp to 7 days
   const handleSendGmail = (contact, subject, body) => {
     const s = subject || contact.emailDraftSubject || 'Internship Outreach';
     const b = body || contact.emailDraftBody || 'Hello...';
@@ -190,11 +214,9 @@ export default function Contacts({
       return c;
     }));
     
-    // Close modal/email reviewer if open
     setSelectedContactForEmail(null);
   };
 
-  // 1-Click AI Generate for one person
   const handleOpenAiModal = (contact) => {
     setAiContact(contact);
     setAiPromptCustom('');
@@ -205,92 +227,193 @@ export default function Contacts({
   };
 
   const handleGenerateAiMessage = async () => {
-    if (!apiKey) {
-      alert('Please enter your OpenAI API key in the Settings tab to generate AI outreach emails.');
-      setTab('settings');
-      setShowAiModal(false);
-      return;
-    }
-
-    setGenerating(true);
     const template = templates.find(t => t.id === selectedTemplateId) || templates[0];
     
-    const prompt = `
-      You are writing a personalized outreach email for an internship.
-      Here are the details of the recipient:
-      - Name: ${aiContact.name}
-      - Title: ${aiContact.title}
-      - Company: ${aiContact.company}
-      - Found Via: ${aiContact.foundVia}
-      - Extra Notes: ${aiContact.notes || 'None'}
-      
-      Sender's Name: Tejith Chennuru
-      Sender's University: University Student
-      
-      We want to use this outreach template as inspiration, but customize it so it sounds completely natural, non-generic, highly personalized, and direct:
-      Subject Template: ${template?.subject || 'Outreach'}
-      Body Template: ${template?.body || 'Hello...'}
-
-      ${aiPromptCustom ? `Specific Instructions from user: ${aiPromptCustom}` : ''}
-
-      Please write a suitable, compelling subject line and a concise body.
-      Return the response in JSON format like this:
-      {
-        "subject": "The email subject line here",
-        "body": "The complete email body here"
-      }
-      Do not include any markdown format around the JSON, just return raw JSON.
-    `;
-
-    try {
-      const response = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: openAiModel || 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: 'You write highly personalized outreach emails. You always return responses in JSON structure containing "subject" and "body" keys. Keep it concise, friendly, and professional.' },
-            { role: 'user', content: prompt }
-          ],
-          response_format: { type: "json_object" }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      const result = JSON.parse(data.choices[0].message.content);
-
+    // --- LOCAL OFFLINE SUBSTITUTION ---
+    if (aiProvider === 'local') {
+      const compiled = compileLocalTemplate(template, aiContact, profile);
       setContacts(contacts.map(c => {
         if (c.id === aiContact.id) {
           return {
             ...c,
-            emailDraftSubject: result.subject || 'Outreach',
-            emailDraftBody: result.body || '',
+            emailDraftSubject: compiled.subject,
+            emailDraftBody: compiled.body,
             status: 'Email Drafted'
           };
         }
         return c;
       }));
-
       setShowAiModal(false);
-      alert(`AI Draft successfully generated for ${aiContact.name}!`);
-    } catch (err) {
-      console.error(err);
-      alert(`Error generating message: ${err.message}`);
-    } finally {
-      setGenerating(false);
+      alert(`Draft offline-generated for ${aiContact.name}!`);
+      return;
+    }
+
+    // --- GEMINI FREE TIER GENERATOR ---
+    if (aiProvider === 'gemini') {
+      if (!geminiApiKey) {
+        alert('Please enter your Gemini API key in the Settings tab to use the free generation features.');
+        setTab('settings');
+        setShowAiModal(false);
+        return;
+      }
+
+      setGenerating(true);
+
+      const prompt = `
+        You are writing a personalized outreach email for an internship.
+        Recipient details:
+        - Name: ${aiContact.name}
+        - Title: ${aiContact.title}
+        - Company: ${aiContact.company}
+        - Found Via: ${aiContact.foundVia}
+        - Extra notes: ${aiContact.notes || 'None'}
+        
+        Sender details:
+        - Name: ${profile.name}
+        - University/School: ${profile.university}
+        - Portfolio link: ${profile.portfolio || 'None'}
+
+        Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic:
+        Subject Template: ${template.subject}
+        Body Template: ${template.body}
+
+        ${aiPromptCustom ? `Specific user instructions to follow: ${aiPromptCustom}` : ''}
+
+        Return your response as a valid JSON object ONLY. Make sure it contains exactly two keys: "subject" and "body". Do not wrap the JSON in markdown code blocks or ticks.
+      `;
+
+      try {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: prompt }]
+            }],
+            generationConfig: {
+              responseMimeType: "application/json"
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Gemini API returned error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text;
+        const result = JSON.parse(text);
+
+        setContacts(contacts.map(c => {
+          if (c.id === aiContact.id) {
+            return {
+              ...c,
+              emailDraftSubject: result.subject || 'Outreach',
+              emailDraftBody: result.body || '',
+              status: 'Email Drafted'
+            };
+          }
+          return c;
+        }));
+
+        setShowAiModal(false);
+        alert(`Personalized draft successfully generated via Gemini Free Tier for ${aiContact.name}!`);
+      } catch (err) {
+        console.error(err);
+        alert(`Error generating message: ${err.message}`);
+      } finally {
+        setGenerating(false);
+      }
+      return;
+    }
+
+    // --- OPENAI PAID GENERATOR ---
+    if (aiProvider === 'openai') {
+      if (!apiKey) {
+        alert('Please enter your OpenAI API key in the Settings tab to generate AI outreach emails.');
+        setTab('settings');
+        setShowAiModal(false);
+        return;
+      }
+
+      setGenerating(true);
+      const prompt = `
+        You are writing a personalized outreach email for an internship.
+        Recipient details:
+        - Name: ${aiContact.name}
+        - Title: ${aiContact.title}
+        - Company: ${aiContact.company}
+        - Found Via: ${aiContact.foundVia}
+        - Extra Notes: ${aiContact.notes || 'None'}
+        
+        Sender's Name: ${profile.name}
+        Sender's University: ${profile.university}
+        Sender's Portfolio: ${profile.portfolio || 'None'}
+        
+        We want to use this outreach template as inspiration, but customize it so it sounds completely natural, non-generic, highly personalized, and direct:
+        Subject Template: ${template?.subject || 'Outreach'}
+        Body Template: ${template?.body || 'Hello...'}
+
+        ${aiPromptCustom ? `Specific Instructions from user: ${aiPromptCustom}` : ''}
+
+        Return response in JSON format:
+        {
+          "subject": "The email subject line here",
+          "body": "The complete email body here"
+        }
+      `;
+
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: openAiModel || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: 'You write highly personalized outreach emails. You always return responses in JSON structure containing "subject" and "body" keys. Keep it concise, friendly, and professional.' },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        const result = JSON.parse(data.choices[0].message.content);
+
+        setContacts(contacts.map(c => {
+          if (c.id === aiContact.id) {
+            return {
+              ...c,
+              emailDraftSubject: result.subject || 'Outreach',
+              emailDraftBody: result.body || '',
+              status: 'Email Drafted'
+            };
+          }
+          return c;
+        }));
+
+        setShowAiModal(false);
+        alert(`AI Draft successfully generated for ${aiContact.name}!`);
+      } catch (err) {
+        console.error(err);
+        alert(`Error generating message: ${err.message}`);
+      } finally {
+        setGenerating(false);
+      }
     }
   };
 
   // Bulk Email Sender
   const handleOpenBulkSender = () => {
-    // Filter contacts that are "Connected" (or "Drafted") and have drafts
     const candidates = contacts.filter(c => 
       c.status === 'Connected' || c.status === 'Email Drafted'
     );
@@ -305,10 +428,8 @@ export default function Contacts({
 
   const handleBulkApprove = () => {
     const contact = bulkContacts[bulkIndex];
-    // Trigger Gmail open
     handleSendGmail(contact, contact.emailDraftSubject || 'Outreach', contact.emailDraftBody || 'Hi...');
     
-    // Move to next
     if (bulkIndex + 1 < bulkContacts.length) {
       setBulkIndex(bulkIndex + 1);
     } else {
@@ -318,7 +439,6 @@ export default function Contacts({
   };
 
   const handleBulkReject = () => {
-    // Just skip
     if (bulkIndex + 1 < bulkContacts.length) {
       setBulkIndex(bulkIndex + 1);
     } else {
@@ -432,7 +552,7 @@ export default function Contacts({
                   <div className="btn-action-group">
                     <button 
                       className="btn-icon primary" 
-                      title="Generate personalized AI Email draft"
+                      title={aiProvider === 'local' ? "Compile template locally" : "Generate personalized AI Email draft"}
                       onClick={() => handleOpenAiModal(contact)}
                     >
                       <Sparkles size={14} />
@@ -660,7 +780,7 @@ export default function Contacts({
             <div className="modal-header">
               <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Sparkles size={18} style={{ color: 'var(--primary-light)' }} />
-                Generate AI Outreach
+                {aiProvider === 'local' ? 'Compile Local Draft' : 'Generate AI Outreach'}
               </h2>
               <button className="btn-icon" onClick={() => setShowAiModal(false)} disabled={generating}>
                 <X size={16} />
@@ -685,35 +805,45 @@ export default function Contacts({
                 </select>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Additional Instructions / Direct Customization (Optional)</label>
-                <textarea 
-                  className="form-textarea"
-                  placeholder="e.g. Mention that I built a React dashboard, or make it extremely short and direct..."
-                  value={aiPromptCustom}
-                  onChange={(e) => setAiPromptCustom(e.target.value)}
-                  disabled={generating}
-                />
-              </div>
+              {aiProvider !== 'local' && (
+                <div className="form-group">
+                  <label className="form-label">Additional Instructions / Direct Customization (Optional)</label>
+                  <textarea 
+                    className="form-textarea"
+                    placeholder="e.g. Mention that I built a React dashboard, or make it extremely short and direct..."
+                    value={aiPromptCustom}
+                    onChange={(e) => setAiPromptCustom(e.target.value)}
+                    disabled={generating}
+                  />
+                </div>
+              )}
 
               {generating && (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '16px 0' }}>
                   <div className="ai-spinner" />
-                  <span style={{ fontSize: '0.8rem', color: 'var(--primary-light)' }}>ChatGPT is generating personalized outreach copy...</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--primary-light)' }}>
+                    {aiProvider === 'gemini' ? 'Gemini Free Tier is generating personalized draft...' : 'ChatGPT is generating personalized draft...'}
+                  </span>
+                </div>
+              )}
+
+              {aiProvider === 'local' && (
+                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '12px' }}>
+                  <strong>Note:</strong> In Local compiler mode, drafts are created instantly on your device by parsing and filling placeholder tags.
                 </div>
               )}
             </div>
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setShowAiModal(false)} disabled={generating}>Cancel</button>
               <button type="button" className="btn btn-primary" onClick={handleGenerateAiMessage} disabled={generating}>
-                <Sparkles size={14} /> Generate Draft
+                <Sparkles size={14} /> {aiProvider === 'local' ? 'Compile Draft' : 'Generate Draft'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Bulk Email Sender Modal (YES/NO Review workflow) */}
+      {/* Bulk Email Sender Modal */}
       {showBulkModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '700px' }}>

@@ -1,24 +1,34 @@
 import React, { useState } from 'react';
-import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, HelpCircle } from 'lucide-react';
 
 export default function Settings({ 
   apiKey, 
   setApiKey, 
+  geminiApiKey,
+  setGeminiApiKey,
+  aiProvider,
+  setAiProvider,
   openAiModel, 
   setOpenAiModel, 
   profile, 
   setProfile, 
   resetDatabase 
 }) {
-  const [showKey, setShowKey] = useState(false);
-  const [localKey, setLocalKey] = useState(apiKey);
+  const [showOpenAiKey, setShowOpenAiKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  
+  const [localOpenAiKey, setLocalOpenAiKey] = useState(apiKey);
+  const [localGeminiKey, setLocalGeminiKey] = useState(geminiApiKey);
+  const [localProvider, setLocalProvider] = useState(aiProvider);
   const [localModel, setLocalModel] = useState(openAiModel);
   const [localProfile, setLocalProfile] = useState({ ...profile });
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e) => {
     e.preventDefault();
-    setApiKey(localKey);
+    setApiKey(localOpenAiKey);
+    setGeminiApiKey(localGeminiKey);
+    setAiProvider(localProvider);
     setOpenAiModel(localModel);
     setProfile(localProfile);
     
@@ -53,42 +63,103 @@ export default function Settings({
           <Key size={18} /> AI & API Configuration
         </h2>
 
+        {/* AI Provider selector */}
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">OpenAI API Key</label>
-          <div style={{ position: 'relative' }}>
-            <input 
-              type={showKey ? "text" : "password"} 
-              className="form-input"
-              style={{ paddingRight: '44px' }}
-              placeholder="sk-proj-..."
-              value={localKey}
-              onChange={(e) => setLocalKey(e.target.value)}
-            />
-            <button 
-              type="button"
-              className="btn-icon"
-              style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent' }}
-              onClick={() => setShowKey(!showKey)}
-            >
-              {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
-            Your key is stored securely in your browser's localStorage and is only dispatched directly to OpenAI.
-          </span>
-        </div>
-
-        <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">ChatGPT Model Selection</label>
+          <label className="form-label">AI Generation Method</label>
           <select 
             className="form-select"
-            value={localModel}
-            onChange={(e) => setLocalModel(e.target.value)}
+            value={localProvider}
+            onChange={(e) => setLocalProvider(e.target.value)}
           >
-            <option value="gpt-4o-mini">gpt-4o-mini (Recommended - Fast & cost-efficient)</option>
-            <option value="gpt-4o">gpt-4o (Higher quality, slower)</option>
+            <option value="gemini">Google Gemini API (Generous Free Tier - Recommended)</option>
+            <option value="openai">OpenAI API (Paid / Credits required)</option>
+            <option value="local">Local Placeholder Substitution (Free, Offline, No Keys needed)</option>
           </select>
         </div>
+
+        {/* Google Gemini Key */}
+        {localProvider === 'gemini' && (
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Google Gemini API Key (Free)</span>
+              <a 
+                href="https://aistudio.google.com/" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                style={{ color: 'var(--secondary)', fontSize: '0.75rem', textDecoration: 'underline' }}
+              >
+                Get Free Gemini API Key
+              </a>
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input 
+                type={showGeminiKey ? "text" : "password"} 
+                className="form-input"
+                style={{ paddingRight: '44px' }}
+                placeholder="AIzaSy..."
+                value={localGeminiKey}
+                onChange={(e) => setLocalGeminiKey(e.target.value)}
+              />
+              <button 
+                type="button"
+                className="btn-icon"
+                style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent' }}
+                onClick={() => setShowGeminiKey(!showGeminiKey)}
+              >
+                {showGeminiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+              Gemini 1.5 Flash offers 15 requests per minute completely free in Google AI Studio.
+            </span>
+          </div>
+        )}
+
+        {/* OpenAI Key */}
+        {localProvider === 'openai' && (
+          <>
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">OpenAI API Key</label>
+              <div style={{ position: 'relative' }}>
+                <input 
+                  type={showOpenAiKey ? "text" : "password"} 
+                  className="form-input"
+                  style={{ paddingRight: '44px' }}
+                  placeholder="sk-proj-..."
+                  value={localOpenAiKey}
+                  onChange={(e) => setLocalOpenAiKey(e.target.value)}
+                />
+                <button 
+                  type="button"
+                  className="btn-icon"
+                  style={{ position: 'absolute', right: '6px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent' }}
+                  onClick={() => setShowOpenAiKey(!showOpenAiKey)}
+                >
+                  {showOpenAiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0 }}>
+              <label className="form-label">ChatGPT Model Selection</label>
+              <select 
+                className="form-select"
+                value={localModel}
+                onChange={(e) => setLocalModel(e.target.value)}
+              >
+                <option value="gpt-4o-mini">gpt-4o-mini (Fast & cost-efficient)</option>
+                <option value="gpt-4o">gpt-4o (Higher quality, slower)</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Local compiler message */}
+        {localProvider === 'local' && (
+          <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+            <strong>Local Substitution Mode Active:</strong> This mode will compile your outreach drafts instantly on your machine for free, by replacing tags like <code>[Contact Name]</code>, <code>[Company Name]</code>, and <code>[Your Name]</code> with actual lead data. No internet or API keys are required.
+          </div>
+        )}
 
         <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
           <User size={18} /> Personal Placeholders
