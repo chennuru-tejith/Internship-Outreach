@@ -34,10 +34,11 @@ export default function Contacts({
   profile,
   setTab,
   selectedContactForEmail,
-  setSelectedContactForEmail
+  setSelectedContactForEmail,
+  statusFilter,
+  setStatusFilter
 }) {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('All');
   
   // Modals state
   const [showAddEditModal, setShowAddEditModal] = useState(false);
@@ -97,6 +98,7 @@ export default function Contacts({
       '\\[Portfolio Link\\]': userProfile.portfolio || 'github.com/my-profile',
       '\\[Project Link\\]': userProfile.portfolio || 'github.com/my-profile',
       '\\[Position Name\\]': contact.title ? `${contact.title} Internship` : 'Software Engineering Intern',
+      '\\[Original Subject\\]': contact.emailDraftSubject || 'Software Engineering Internship Outreach',
     };
 
     Object.entries(replacements).forEach(([placeholder, value]) => {
@@ -154,15 +156,18 @@ export default function Contacts({
     e.preventDefault();
     if (editingContact) {
       setContacts(contacts.map(c => {
-        let followUp = formData.followUpDate;
-        if (formData.status === 'Email Sent' && c.status !== 'Email Sent') {
-          followUp = getSevenDaysLater();
+        if (c.id === editingContact.id) {
+          let followUp = formData.followUpDate;
+          if (formData.status === 'Email Sent' && c.status !== 'Email Sent') {
+            followUp = getSevenDaysLater();
+          }
+          return { 
+            ...c, 
+            ...formData, 
+            followUpDate: followUp 
+          };
         }
-        return { 
-          ...c, 
-          ...formData, 
-          followUpDate: followUp 
-        };
+        return c;
       }));
     } else {
       const newContact = {

@@ -4,7 +4,7 @@ import {
   ArrowUpRight, AlertCircle, Mail, ExternalLink, Award 
 } from 'lucide-react';
 
-export default function Dashboard({ contacts, companies, setTab, setSelectedContactForEmail }) {
+export default function Dashboard({ contacts, companies, setTab, setSelectedContactForEmail, setStatusFilter }) {
   const todayStr = new Date().toISOString().split('T')[0];
 
   // Helper to format dates nicely
@@ -66,7 +66,7 @@ export default function Dashboard({ contacts, companies, setTab, setSelectedCont
 
       {/* KPI Cards Grid */}
       <div className="grid-kpi">
-        <div className="card-kpi">
+        <div className="card-kpi" onClick={() => { setStatusFilter('All'); setTab('contacts'); }} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
             <span className="kpi-title">Total Leads</span>
             <div className="kpi-icon"><Users size={20} /></div>
@@ -77,7 +77,7 @@ export default function Dashboard({ contacts, companies, setTab, setSelectedCont
           </div>
         </div>
 
-        <div className="card-kpi">
+        <div className="card-kpi" onClick={() => { setStatusFilter('Connected'); setTab('contacts'); }} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
             <span className="kpi-title">Connections</span>
             <div className="kpi-icon"><CheckCircle size={20} /></div>
@@ -89,7 +89,7 @@ export default function Dashboard({ contacts, companies, setTab, setSelectedCont
           </div>
         </div>
 
-        <div className="card-kpi">
+        <div className="card-kpi" onClick={() => { setStatusFilter('Replied'); setTab('contacts'); }} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
             <span className="kpi-title">Replies</span>
             <div className="kpi-icon"><MessageSquare size={20} /></div>
@@ -101,7 +101,7 @@ export default function Dashboard({ contacts, companies, setTab, setSelectedCont
           </div>
         </div>
 
-        <div className="card-kpi">
+        <div className="card-kpi" onClick={() => { setStatusFilter('Interview Scheduled'); setTab('contacts'); }} style={{ cursor: 'pointer' }}>
           <div className="kpi-header">
             <span className="kpi-title">Interviews</span>
             <div className="kpi-icon"><Briefcase size={20} /></div>

@@ -54,6 +54,7 @@ export default function App() {
 
   const [selectedTab, setSelectedTab] = useState('dashboard');
   const [selectedContactForEmail, setSelectedContactForEmail] = useState(null);
+  const [statusFilter, setStatusFilter] = useState('All');
 
   // --- Local Storage Synchronization ---
   useEffect(() => {
@@ -200,6 +201,7 @@ export default function App() {
             companies={companies} 
             setTab={handleSetTab} 
             setSelectedContactForEmail={setSelectedContactForEmail}
+            setStatusFilter={setStatusFilter}
           />
         )}
         {selectedTab === 'contacts' && (
@@ -216,6 +218,8 @@ export default function App() {
             setTab={handleSetTab}
             selectedContactForEmail={selectedContactForEmail}
             setSelectedContactForEmail={setSelectedContactForEmail}
+            statusFilter={statusFilter}
+            setStatusFilter={setStatusFilter}
           />
         )}
         {selectedTab === 'companies' && (
