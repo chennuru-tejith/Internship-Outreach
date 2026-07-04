@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, HelpCircle } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, ShieldAlert } from 'lucide-react';
 
 export default function Settings({ 
   apiKey, 
@@ -12,7 +12,11 @@ export default function Settings({
   setOpenAiModel, 
   profile, 
   setProfile, 
-  resetDatabase 
+  resetDatabase,
+  googleClientId,
+  setGoogleClientId,
+  gmailToken,
+  setGmailToken
 }) {
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -22,6 +26,7 @@ export default function Settings({
   const [localProvider, setLocalProvider] = useState(aiProvider);
   const [localModel, setLocalModel] = useState(openAiModel);
   const [localProfile, setLocalProfile] = useState({ ...profile });
+  const [localGoogleClientId, setLocalGoogleClientId] = useState(googleClientId);
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e) => {
@@ -31,9 +36,41 @@ export default function Settings({
     setAiProvider(localProvider);
     setOpenAiModel(localModel);
     setProfile(localProfile);
+    setGoogleClientId(localGoogleClientId);
     
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
+  };
+
+  const handleGoogleLogin = () => {
+    if (!localGoogleClientId) {
+      alert('Please enter your Google OAuth Client ID first. You can get one for free from Google Cloud Console.');
+      return;
+    }
+    if (!window.google) {
+      alert('Google Accounts SDK library is still loading. Please wait a moment and try again.');
+      return;
+    }
+    
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: localGoogleClientId,
+        scope: 'https://www.googleapis.com/auth/gmail.send',
+        callback: (tokenResponse) => {
+          if (tokenResponse && tokenResponse.access_token) {
+            setGmailToken(tokenResponse.access_token);
+            alert('Successfully authenticated with Google! Direct Gmail sending is now active.');
+          } else {
+            console.error(tokenResponse);
+            alert('Google Sign-In callback returned without token.');
+          }
+        },
+      });
+      client.requestAccessToken({ prompt: 'consent' });
+    } catch (err) {
+      console.error(err);
+      alert(`OAuth initialization failed: ${err.message}`);
+    }
   };
 
   const handleReset = () => {
@@ -161,6 +198,47 @@ export default function Settings({
           </div>
         )}
 
+        {/* Google OAuth Direct Send Section */}
+        <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
+          <Mail size={18} /> Google & Gmail Direct Send Integration
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          By configuring Google Sign-In, the platform can send your personalized drafts directly via the Gmail API in the background—no more opening multiple browser tabs!
+        </p>
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Google OAuth Web Client ID</label>
+          <input 
+            type="text" 
+            className="form-input" 
+            placeholder="123456-abcdef.apps.googleusercontent.com"
+            value={localGoogleClientId}
+            onChange={(e) => setLocalGoogleClientId(e.target.value)}
+          />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+            To generate: Create a Web Application OAuth Client ID on Google Cloud Console. Set Authorized Javascript Origins to <code>http://localhost:5173</code>.
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+          <div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>Gmail API Connection</div>
+            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              {gmailToken ? 'Connected successfully! Direct Send is active.' : 'Not connected. Authenticate to enable background sending.'}
+            </div>
+          </div>
+          <button 
+            type="button" 
+            className={`btn ${gmailToken ? 'btn-secondary' : 'btn-primary'}`}
+            style={{ padding: '8px 16px', fontSize: '0.8rem' }}
+            onClick={handleGoogleLogin}
+            disabled={!localGoogleClientId}
+          >
+            {gmailToken ? 'Re-authenticate with Google' : 'Sign in with Google'}
+          </button>
+        </div>
+
+        {/* Personal Placeholders Section */}
         <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
           <User size={18} /> Personal Placeholders
         </h2>

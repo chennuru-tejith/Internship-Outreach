@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Plus, Search, Mail, Edit2, Trash2, 
-  Sparkles, Check, X, ExternalLink, Calendar, HelpCircle 
+  Sparkles, Check, X, ExternalLink, Calendar, HelpCircle, Send 
 } from 'lucide-react';
 
 const Linkedin = ({ size = 24, ...props }) => (
@@ -36,7 +36,9 @@ export default function Contacts({
   selectedContactForEmail,
   setSelectedContactForEmail,
   statusFilter,
-  setStatusFilter
+  setStatusFilter,
+  gmailToken,
+  setGmailToken
 }) {
   const [search, setSearch] = useState('');
   
@@ -202,6 +204,7 @@ export default function Contacts({
     }
   };
 
+  // Gmail Compose Tab redirect fallback
   const handleSendGmail = (contact, subject, body) => {
     const s = subject || contact.emailDraftSubject || 'Internship Outreach';
     const b = body || contact.emailDraftBody || 'Hello...';
@@ -220,6 +223,79 @@ export default function Contacts({
     }));
     
     setSelectedContactForEmail(null);
+  };
+
+  // Gmail API Direct send mechanism (no tabs opened!)
+  const sendDirectEmail = async (to, subject, body, token) => {
+    const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+    const emailLines = [
+      `To: ${to}`,
+      `Subject: ${utf8Subject}`,
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="UTF-8"',
+      'Content-Transfer-Encoding: 7bit',
+      '',
+      body
+    ];
+    const email = emailLines.join('\r\n');
+    const base64Safe = btoa(unescape(encodeURIComponent(email)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        raw: base64Safe
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error?.message || `Gmail API returned status ${response.status}`);
+    }
+
+    return await response.json();
+  };
+
+  const handleSendDirectGmail = async (contact, subject, body) => {
+    setGenerating(true);
+    const s = subject || contact.emailDraftSubject || 'Internship Outreach';
+    const b = body || contact.emailDraftBody || 'Hello...';
+
+    try {
+      await sendDirectEmail(contact.email, s, b, gmailToken);
+      
+      setContacts(contacts.map(c => {
+        if (c.id === contact.id) {
+          return {
+            ...c,
+            status: 'Email Sent',
+            followUpDate: getSevenDaysLater()
+          };
+        }
+        return c;
+      }));
+
+      alert(`Email sent successfully via Gmail API directly to ${contact.name}!`);
+      setSelectedContactForEmail(null);
+    } catch (err) {
+      console.error(err);
+      if (err.message.includes('401') || err.message.toLowerCase().includes('invalid credentials') || err.message.toLowerCase().includes('expired')) {
+        alert('Your Google access token has expired. Falling back to Gmail Compose tab redirect...');
+        setGmailToken(''); // reset token
+        handleSendGmail(contact, s, b);
+      } else {
+        alert(`Error sending email directly: ${err.message}. Redirecting to Gmail Web compose fallback...`);
+        handleSendGmail(contact, s, b);
+      }
+    } finally {
+      setGenerating(false);
+    }
   };
 
   const handleOpenAiModal = (contact) => {
@@ -431,9 +507,21 @@ export default function Contacts({
     setShowBulkModal(true);
   };
 
-  const handleBulkApprove = () => {
+  const handleBulkApproveDirect = async () => {
     const contact = bulkContacts[bulkIndex];
-    handleSendGmail(contact, contact.emailDraftSubject || 'Outreach', contact.emailDraftBody || 'Hi...');
+    await handleSendDirectGmail(contact, contact.emailDraftSubject, contact.emailDraftBody);
+    
+    if (bulkIndex + 1 < bulkContacts.length) {
+      setBulkIndex(bulkIndex + 1);
+    } else {
+      setShowBulkModal(false);
+      alert('Bulk send workflow completed!');
+    }
+  };
+
+  const handleBulkApproveComposeTab = () => {
+    const contact = bulkContacts[bulkIndex];
+    handleSendGmail(contact, contact.emailDraftSubject, contact.emailDraftBody);
     
     if (bulkIndex + 1 < bulkContacts.length) {
       setBulkIndex(bulkIndex + 1);
@@ -848,7 +936,7 @@ export default function Contacts({
         </div>
       )}
 
-      {/* Bulk Email Sender Modal */}
+      {/* Bulk Email Sender Modal (with both Direct Send & Web Compose) */}
       {showBulkModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '700px' }}>
@@ -914,14 +1002,27 @@ export default function Contacts({
               <button type="button" className="btn btn-secondary" onClick={handleBulkReject}>
                 Skip Contact (No)
               </button>
-              <button 
-                type="button" 
-                className="btn btn-primary" 
-                disabled={!bulkContacts[bulkIndex]?.emailDraftSubject}
-                onClick={handleBulkApprove}
-              >
-                Approve & Open Gmail (Yes)
-              </button>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  disabled={!bulkContacts[bulkIndex]?.emailDraftSubject}
+                  onClick={handleBulkApproveComposeTab}
+                >
+                  Approve & Open Compose Tab
+                </button>
+                {gmailToken && (
+                  <button 
+                    type="button" 
+                    className="btn btn-primary" 
+                    disabled={!bulkContacts[bulkIndex]?.emailDraftSubject || generating}
+                    onClick={handleBulkApproveDirect}
+                    style={{ gap: '6px' }}
+                  >
+                    <Send size={12} /> Approve & Send Direct
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -981,15 +1082,27 @@ export default function Contacts({
                 />
               </div>
             </div>
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ justifyContent: 'flex-end', gap: '8px' }}>
               <button type="button" className="btn btn-secondary" onClick={() => setSelectedContactForEmail(null)}>Close</button>
               <button 
                 type="button" 
-                className="btn btn-primary"
+                className="btn btn-secondary"
                 onClick={() => handleSendGmail(selectedContactForEmail)}
+                style={{ gap: '6px' }}
               >
-                Send via Gmail Compose <ExternalLink size={14} />
+                Gmail Compose Tab <ExternalLink size={14} />
               </button>
+              {gmailToken && (
+                <button 
+                  type="button" 
+                  className="btn btn-primary"
+                  onClick={() => handleSendDirectGmail(selectedContactForEmail)}
+                  disabled={generating}
+                  style={{ gap: '6px' }}
+                >
+                  <Send size={14} /> Send Direct via Gmail API
+                </button>
+              )}
             </div>
           </div>
         </div>

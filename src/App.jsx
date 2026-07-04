@@ -56,6 +56,11 @@ export default function App() {
   const [selectedContactForEmail, setSelectedContactForEmail] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
 
+  const [googleClientId, setGoogleClientId] = useState(() => {
+    return localStorage.getItem('crm_google_client_id') || '';
+  });
+  const [gmailToken, setGmailToken] = useState('');
+
   // --- Local Storage Synchronization ---
   useEffect(() => {
     localStorage.setItem('crm_contacts', JSON.stringify(contacts));
@@ -88,6 +93,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('crm_profile', JSON.stringify(profile));
   }, [profile]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_google_client_id', googleClientId);
+  }, [googleClientId]);
 
   const resetDatabase = () => {
     localStorage.removeItem('crm_contacts');
@@ -220,6 +229,8 @@ export default function App() {
             setSelectedContactForEmail={setSelectedContactForEmail}
             statusFilter={statusFilter}
             setStatusFilter={setStatusFilter}
+            gmailToken={gmailToken}
+            setGmailToken={setGmailToken}
           />
         )}
         {selectedTab === 'companies' && (
@@ -260,6 +271,10 @@ export default function App() {
             profile={profile}
             setProfile={setProfile}
             resetDatabase={resetDatabase}
+            googleClientId={googleClientId}
+            setGoogleClientId={setGoogleClientId}
+            gmailToken={gmailToken}
+            setGmailToken={setGmailToken}
           />
         )}
       </main>
