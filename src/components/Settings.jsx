@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, FileText } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, FileText, Settings as ConfigIcon } from 'lucide-react';
 
 export default function Settings({ 
   apiKey, 
@@ -18,7 +18,13 @@ export default function Settings({
   googleClientId,
   setGoogleClientId,
   gmailToken,
-  setGmailToken
+  setGmailToken,
+  emailClient,
+  setEmailClient,
+  globalCc,
+  setGlobalCc,
+  globalBcc,
+  setGlobalBcc
 }) {
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -30,6 +36,9 @@ export default function Settings({
   const [localProfile, setLocalProfile] = useState({ ...profile });
   const [localGoogleClientId, setLocalGoogleClientId] = useState(googleClientId);
   const [localResumeText, setLocalResumeText] = useState(resumeText);
+  const [localEmailClient, setLocalEmailClient] = useState(emailClient);
+  const [localGlobalCc, setLocalGlobalCc] = useState(globalCc);
+  const [localGlobalBcc, setLocalGlobalBcc] = useState(globalBcc);
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e) => {
@@ -41,6 +50,9 @@ export default function Settings({
     setProfile(localProfile);
     setGoogleClientId(localGoogleClientId);
     setResumeText(localResumeText);
+    setEmailClient(localEmailClient);
+    setGlobalCc(localGlobalCc);
+    setGlobalBcc(localGlobalBcc);
     
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -202,6 +214,48 @@ export default function Settings({
           </div>
         )}
 
+        {/* Email Client & Default CC/BCC Configuration */}
+        <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
+          <ConfigIcon size={18} /> Client & Copy Settings (Outlook/Gmail)
+        </h2>
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Default Email Client</label>
+          <select 
+            className="form-select"
+            value={localEmailClient}
+            onChange={(e) => setLocalEmailClient(e.target.value)}
+          >
+            <option value="gmail">Gmail Web Interface</option>
+            <option value="outlook">Outlook Web Interface (deeplink)</option>
+            <option value="default">Native System Default (e.g. Desktop Outlook, Apple Mail)</option>
+          </select>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Default CC Address (Optional)</label>
+            <input 
+              type="email" 
+              className="form-input" 
+              placeholder="e.g. tracking@myuni.edu"
+              value={localGlobalCc}
+              onChange={(e) => setLocalGlobalCc(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Default BCC Address (Optional)</label>
+            <input 
+              type="email" 
+              className="form-input" 
+              placeholder="e.g. archive@myprofile.com"
+              value={localGlobalBcc}
+              onChange={(e) => setLocalGlobalBcc(e.target.value)}
+            />
+          </div>
+        </div>
+
         {/* Resume & Qualifications Section */}
         <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
           <FileText size={18} /> Resume & Qualifications Context
@@ -225,7 +279,7 @@ export default function Settings({
           <Mail size={18} /> Google & Gmail Direct Send Integration
         </h2>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          By configuring Google Sign-In, the platform can send your personalized drafts directly via the Gmail API in the background—no more opening multiple browser tabs!
+          By configuring Google Sign-In, the platform can send your personalized drafts directly via the Gmail API in the background—no more opening multiple browser tabs! (Applies when using Gmail Web/API).
         </p>
 
         <div className="form-group" style={{ margin: 0 }}>

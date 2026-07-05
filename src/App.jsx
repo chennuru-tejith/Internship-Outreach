@@ -65,6 +65,19 @@ export default function App() {
     return localStorage.getItem('crm_resume_text') || '';
   });
 
+  // Outlook and Email client states
+  const [emailClient, setEmailClient] = useState(() => {
+    return localStorage.getItem('crm_email_client') || 'gmail'; // 'gmail' | 'outlook' | 'default'
+  });
+
+  const [globalCc, setGlobalCc] = useState(() => {
+    return localStorage.getItem('crm_global_cc') || '';
+  });
+
+  const [globalBcc, setGlobalBcc] = useState(() => {
+    return localStorage.getItem('crm_global_bcc') || '';
+  });
+
   const [selectedTab, setSelectedTab] = useState('dashboard');
   const [selectedContactForEmail, setSelectedContactForEmail] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
@@ -115,6 +128,18 @@ export default function App() {
     localStorage.setItem('crm_resume_text', resumeText);
   }, [resumeText]);
 
+  useEffect(() => {
+    localStorage.setItem('crm_email_client', emailClient);
+  }, [emailClient]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_global_cc', globalCc);
+  }, [globalCc]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_global_bcc', globalBcc);
+  }, [globalBcc]);
+
   const resetDatabase = () => {
     localStorage.removeItem('crm_contacts');
     localStorage.removeItem('crm_companies');
@@ -126,6 +151,9 @@ export default function App() {
     localStorage.removeItem('crm_openai_model');
     localStorage.removeItem('crm_google_client_id');
     localStorage.removeItem('crm_resume_text');
+    localStorage.removeItem('crm_email_client');
+    localStorage.removeItem('crm_global_cc');
+    localStorage.removeItem('crm_global_bcc');
   };
 
   const handleSetTab = (tab) => {
@@ -256,6 +284,9 @@ export default function App() {
             setStatusFilter={setStatusFilter}
             gmailToken={gmailToken}
             setGmailToken={setGmailToken}
+            emailClient={emailClient}
+            globalCc={globalCc}
+            globalBcc={globalBcc}
           />
         )}
         {selectedTab === 'finder' && (
@@ -309,6 +340,12 @@ export default function App() {
             setGoogleClientId={setGoogleClientId}
             gmailToken={gmailToken}
             setGmailToken={setGmailToken}
+            emailClient={emailClient}
+            setEmailClient={setEmailClient}
+            globalCc={globalCc}
+            setGlobalCc={setGlobalCc}
+            globalBcc={globalBcc}
+            setGlobalBcc={setGlobalBcc}
           />
         )}
       </main>

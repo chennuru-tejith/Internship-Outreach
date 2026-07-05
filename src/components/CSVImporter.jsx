@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
-import { Upload, Check, AlertTriangle, ArrowRight, Grid } from 'lucide-react';
+import { Upload, Check, AlertTriangle, ArrowRight, Grid, FileText } from 'lucide-react';
 
 export default function CSVImporter({ contacts, setContacts, setTab }) {
   const [csvData, setCsvData] = useState([]);
   const [csvHeaders, setCsvHeaders] = useState([]);
   const [fileName, setFileName] = useState('');
+  const [importType, setImportType] = useState('csv'); // 'csv' | 'txt'
   
   // Column Mappings
   const [mappings, setMappings] = useState({
@@ -70,25 +71,81 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
     if (!file) return;
     setFileName(file.name);
 
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => {
-        if (results.data && results.data.length > 0) {
-          const headers = Object.keys(results.data[0]);
-          setCsvHeaders(headers);
-          setCsvData(results.data);
-          setPreviewRows(results.data.slice(0, 5));
-          autoDetectMappings(headers);
+    const isCsv = file.name.endsWith('.csv');
+    
+    if (isCsv) {
+      setImportType('csv');
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          if (results.data && results.data.length > 0) {
+            const headers = Object.keys(results.data[0]);
+            setCsvHeaders(headers);
+            setCsvData(results.data);
+            setPreviewRows(results.data.slice(0, 5));
+            autoDetectMappings(headers);
+            setStatus('loaded');
+          } else {
+            alert('Empty CSV or invalid file structure.');
+          }
+        },
+        error: (error) => {
+          alert(`Error parsing CSV: ${error.message}`);
+        }
+      });
+    } else {
+      setImportType('txt');
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        // Regex to match email addresses
+        const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+        const matches = text.match(emailRegex) || [];
+        
+        if (matches.length > 0) {
+          const uniqueEmails = Array.from(new Set(matches));
+          
+          // Construct structured data from raw email list
+          const structuredData = uniqueEmails.map(email => {
+            // Attempt to guess names from email prefix (e.g. john.doe@email.com -> John Doe)
+            const prefix = email.split('@')[0];
+            const parts = prefix.split(/[._+-]/);
+            const guessedName = parts
+              .map(p => p.charAt(0).toUpperCase() + p.slice(1))
+              .join(' ');
+
+            return {
+              name: guessedName || 'Unknown Lead',
+              email: email,
+              company: 'Target Company',
+              title: 'Recruiter',
+              linkedin: '',
+              foundVia: 'Raw List Import'
+            };
+          });
+
+          setCsvHeaders(['name', 'email', 'company', 'title', 'linkedin', 'foundVia']);
+          setCsvData(structuredData);
+          setPreviewRows(structuredData.slice(0, 5));
+          setMappings({
+            name: 'name',
+            email: 'email',
+            company: 'company',
+            title: 'title',
+            linkedin: 'linkedin',
+            foundVia: 'foundVia'
+          });
           setStatus('loaded');
         } else {
-          alert('Empty CSV or invalid file structure.');
+          alert('Could not find any email addresses in this text file.');
         }
-      },
-      error: (error) => {
-        alert(`Error parsing CSV: ${error.message}`);
-      }
-    });
+      };
+      reader.onerror = () => {
+        alert('Error reading text file.');
+      };
+      reader.readAsText(file);
+    }
   };
 
   const handleMappingChange = (crmKey, csvVal) => {
@@ -106,10 +163,8 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
     }
 
     const imported = csvData.map((row, index) => {
-      // Clean and resolve name
       let nameVal = row[mappings.name] || 'Unknown Lead';
       
-      // If we only have firstName / lastName in separate columns
       if (!row[mappings.name] && row['firstName']) {
         nameVal = `${row['firstName']} ${row['lastName'] || ''}`.trim();
       }
@@ -118,17 +173,19 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
         id: 'imported_' + index + '_' + Math.random().toString(36).substr(2, 5),
         name: nameVal,
         email: row[mappings.email] || '',
+        cc: '', // Default empty individual CC
+        bcc: '', // Default empty individual BCC
         company: row[mappings.company] || 'Other',
         title: row[mappings.title] || 'Professional',
         linkedin: row[mappings.linkedin] || '',
-        foundVia: row[mappings.foundVia] || 'PhantomBuster Export',
+        foundVia: row[mappings.foundVia] || (importType === 'txt' ? 'Text List Extractor' : 'PhantomBuster Export'),
         status: 'Not Contacted',
         score: 70, // Default match score
         followUpDate: '',
         responseNotes: '',
         emailDraftSubject: '',
         emailDraftBody: '',
-        notes: `Imported from CSV file: ${fileName}`
+        notes: `Imported from file: ${fileName}`
       };
     });
 
@@ -141,8 +198,8 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-title">CSV & Lead Importer</h1>
-        <p className="page-subtitle">Paste PhantomBuster or custom CSV files to quickly bulk populate your outreach list.</p>
+        <h1 className="page-title">CSV & Email List Extractor</h1>
+        <p className="page-subtitle">Upload structured CSV exports or drag raw text logs/files to automatically extract email contacts.</p>
       </div>
 
       {status === 'idle' && (
@@ -150,18 +207,18 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
           <label className="dropzone">
             <input 
               type="file" 
-              accept=".csv" 
+              accept=".csv,.txt" 
               style={{ display: 'none' }} 
               onChange={handleFileUpload} 
             />
             <div className="dropzone-icon">
               <Upload size={32} />
             </div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Drag and drop your outreach CSV here</h3>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', maxWidth: '400px', margin: '0 auto' }}>
-              Supports PhantomBuster LinkedIn Search Export, LinkedIn Sales Navigator exports, or custom CSV templates.
+            <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Drag and drop CSV or raw TXT email lists here</h3>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', maxWidth: '500px', margin: '8px auto 0 auto' }}>
+              Accepts structured `.csv` files (sales navigator, phantombuster) or raw `.txt` files (emails are automatically regex-extracted).
             </p>
-            <span className="btn btn-primary" style={{ marginTop: '12px' }}>Choose CSV File</span>
+            <span className="btn btn-primary" style={{ marginTop: '16px' }}>Choose Outreach File</span>
           </label>
         </div>
       )}
@@ -171,10 +228,12 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
           {/* Mapping configuration */}
           <div className="card-panel">
             <h2 className="panel-title" style={{ marginBottom: '16px' }}>
-              <Grid size={18} /> Map CSV Columns
+              <Grid size={18} /> Map Lead Fields
             </h2>
             <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '24px' }}>
-              Select which column in your CSV maps to each field in your CRM. Required fields are marked with an asterisk (*).
+              {importType === 'txt' 
+                ? 'Emails were automatically extracted from the text file. Confirm the mappings below to import.'
+                : 'Select which column in your CSV maps to each CRM field. Required fields are marked with an asterisk (*).'}
             </p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -184,7 +243,7 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
                     <span>{field.label}</span>
                     {mappings[field.key] && (
                       <span style={{ color: 'var(--color-success)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem' }}>
-                        <Check size={10} /> Auto-mapped
+                        <Check size={10} /> Mapped
                       </span>
                     )}
                   </label>
@@ -219,7 +278,10 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
           {/* Preview panel */}
           <div className="card-panel">
             <div className="panel-header" style={{ border: 'none', padding: 0 }}>
-              <h2 className="panel-title">Data Preview (First 5 Rows)</h2>
+              <h2 className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {importType === 'txt' ? <FileText size={18} /> : <Grid size={18} />}
+                Extracted Data Preview (First 5 Rows)
+              </h2>
               <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>File: {fileName}</span>
             </div>
 
@@ -251,7 +313,7 @@ export default function CSVImporter({ contacts, setContacts, setTab }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', padding: '16px', borderRadius: '12px', marginTop: '24px' }}>
               <AlertTriangle size={24} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                <strong>Tip:</strong> Ensure your CSV contains distinct email addresses. Duplicate emails will be imported, but we recommend auditing details inside the contacts panel afterward.
+                <strong>Tip:</strong> Duplicates will be skipped or audited in your contacts page. Extracted lists will default to role "Recruiter" which can be batch updated later.
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Plus, Search, Mail, Edit2, Trash2, 
-  Sparkles, Check, X, ExternalLink, Calendar, HelpCircle, Send 
+  Sparkles, Check, X, ExternalLink, Calendar, HelpCircle, Send, Play, CheckCircle2 
 } from 'lucide-react';
 
 const Linkedin = ({ size = 24, ...props }) => (
@@ -32,16 +32,23 @@ export default function Contacts({
   aiProvider,
   openAiModel, 
   profile,
+  resumeText,
   setTab,
   selectedContactForEmail,
   setSelectedContactForEmail,
   statusFilter,
   setStatusFilter,
   gmailToken,
-  setGmailToken
+  setGmailToken,
+  emailClient,
+  globalCc,
+  globalBcc
 }) {
   const [search, setSearch] = useState('');
   
+  // Selection states for Mass Campaigns
+  const [selectedContactIds, setSelectedContactIds] = useState([]);
+
   // Modals state
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
@@ -53,10 +60,17 @@ export default function Contacts({
   const [generating, setGenerating] = useState(false);
   const [aiPromptCustom, setAiPromptCustom] = useState('');
 
-  // Bulk sender state
+  // Bulk sender state (reviewing drafted emails sequentially)
   const [bulkContacts, setBulkContacts] = useState([]);
   const [bulkIndex, setBulkIndex] = useState(0);
   const [showBulkModal, setShowBulkModal] = useState(false);
+
+  // Mass Campaign Modal state
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [campaignTemplateId, setCampaignTemplateId] = useState(templates[0]?.id || '');
+  const [campaignStatus, setCampaignStatus] = useState('idle'); // idle | sending | completed
+  const [campaignIndex, setCampaignIndex] = useState(0);
+  const [campaignLogs, setCampaignLogs] = useState([]);
 
   // Form states for Add/Edit
   const [formData, setFormData] = useState({
@@ -64,6 +78,8 @@ export default function Contacts({
     title: '',
     company: '',
     email: '',
+    cc: '',
+    bcc: '',
     linkedin: '',
     foundVia: 'LinkedIn Search',
     status: 'Not Contacted',
@@ -119,6 +135,8 @@ export default function Contacts({
       title: '',
       company: '',
       email: '',
+      cc: '',
+      bcc: '',
       linkedin: '',
       foundVia: 'LinkedIn Search',
       status: 'Not Contacted',
@@ -137,6 +155,8 @@ export default function Contacts({
       title: contact.title || '',
       company: contact.company || '',
       email: contact.email || '',
+      cc: contact.cc || '',
+      bcc: contact.bcc || '',
       linkedin: contact.linkedin || '',
       foundVia: contact.foundVia || 'LinkedIn Search',
       status: contact.status || 'Not Contacted',
@@ -151,6 +171,7 @@ export default function Contacts({
   const handleDelete = (id) => {
     if (window.confirm('Are you sure you want to delete this contact?')) {
       setContacts(contacts.filter(c => c.id !== id));
+      setSelectedContactIds(selectedContactIds.filter(selectedId => selectedId !== id));
     }
   };
 
@@ -186,6 +207,26 @@ export default function Contacts({
     setShowAddEditModal(false);
   };
 
+  // Compile deep link URLs based on selected client (Gmail, Outlook, Default Mailto) and CC/BCC
+  const getEmailClientComposeUrl = (contact, subject, body) => {
+    const to = contact.email;
+    const s = subject || contact.emailDraftSubject || 'Internship Outreach';
+    const b = body || contact.emailDraftBody || 'Hello...';
+    
+    // Resolve CC and BCC priorities (contact-specific CC -> global CC)
+    const ccVal = contact.cc || globalCc || '';
+    const bccVal = contact.bcc || globalBcc || '';
+
+    if (emailClient === 'outlook') {
+      return `https://outlook.live.com/mail/0/deeplink/compose?to=${encodeURIComponent(to)}&cc=${encodeURIComponent(ccVal)}&bcc=${encodeURIComponent(bccVal)}&subject=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`;
+    } else if (emailClient === 'default') {
+      return `mailto:${encodeURIComponent(to)}?cc=${encodeURIComponent(ccVal)}&bcc=${encodeURIComponent(bccVal)}&subject=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`;
+    } else {
+      // Default to Gmail Web
+      return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&cc=${encodeURIComponent(ccVal)}&bcc=${encodeURIComponent(bccVal)}&su=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`;
+    }
+  };
+
   const handleOpenLinkedIn = (contact) => {
     if (contact.linkedin) {
       window.open(contact.linkedin, '_blank');
@@ -204,12 +245,10 @@ export default function Contacts({
     }
   };
 
-  // Gmail Compose Tab redirect fallback
+  // Redirect composer open
   const handleSendGmail = (contact, subject, body) => {
-    const s = subject || contact.emailDraftSubject || 'Internship Outreach';
-    const b = body || contact.emailDraftBody || 'Hello...';
-    const mailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(contact.email)}&su=${encodeURIComponent(s)}&body=${encodeURIComponent(b)}`;
-    window.open(mailUrl, '_blank');
+    const composeUrl = getEmailClientComposeUrl(contact, subject, body);
+    window.open(composeUrl, '_blank');
 
     setContacts(contacts.map(c => {
       if (c.id === contact.id) {
@@ -226,17 +265,20 @@ export default function Contacts({
   };
 
   // Gmail API Direct send mechanism (no tabs opened!)
-  const sendDirectEmail = async (to, subject, body, token) => {
+  const sendDirectEmail = async (to, subject, body, token, cc = '', bcc = '') => {
     const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
     const emailLines = [
       `To: ${to}`,
+      cc ? `Cc: ${cc}` : '',
+      bcc ? `Bcc: ${bcc}` : '',
       `Subject: ${utf8Subject}`,
       'MIME-Version: 1.0',
       'Content-Type: text/plain; charset="UTF-8"',
       'Content-Transfer-Encoding: 7bit',
       '',
       body
-    ];
+    ].filter(Boolean);
+
     const email = emailLines.join('\r\n');
     const base64Safe = btoa(unescape(encodeURIComponent(email)))
       .replace(/\+/g, '-')
@@ -266,9 +308,11 @@ export default function Contacts({
     setGenerating(true);
     const s = subject || contact.emailDraftSubject || 'Internship Outreach';
     const b = body || contact.emailDraftBody || 'Hello...';
+    const ccVal = contact.cc || globalCc || '';
+    const bccVal = contact.bcc || globalBcc || '';
 
     try {
-      await sendDirectEmail(contact.email, s, b, gmailToken);
+      await sendDirectEmail(contact.email, s, b, gmailToken, ccVal, bccVal);
       
       setContacts(contacts.map(c => {
         if (c.id === contact.id) {
@@ -286,11 +330,11 @@ export default function Contacts({
     } catch (err) {
       console.error(err);
       if (err.message.includes('401') || err.message.toLowerCase().includes('invalid credentials') || err.message.toLowerCase().includes('expired')) {
-        alert('Your Google access token has expired. Falling back to Gmail Compose tab redirect...');
+        alert('Your Google access token has expired. Falling back to Compose redirect compose tab...');
         setGmailToken(''); // reset token
         handleSendGmail(contact, s, b);
       } else {
-        alert(`Error sending email directly: ${err.message}. Redirecting to Gmail Web compose fallback...`);
+        alert(`Error sending email directly: ${err.message}. Redirecting to Web compose fallback...`);
         handleSendGmail(contact, s, b);
       }
     } finally {
@@ -307,205 +351,112 @@ export default function Contacts({
     setShowAiModal(true);
   };
 
-  const handleGenerateAiMessage = async () => {
-    const template = templates.find(t => t.id === selectedTemplateId) || templates[0];
+  // Compile template context (supports both local/API flows)
+  const generateSingleDraftContext = async (contact, templateId, customInstruction = '') => {
+    const template = templates.find(t => t.id === templateId) || templates[0];
     
-    // --- LOCAL OFFLINE SUBSTITUTION ---
     if (aiProvider === 'local') {
-      const compiled = compileLocalTemplate(template, aiContact, profile);
+      const compiled = compileLocalTemplate(template, contact, profile);
+      return { subject: compiled.subject, body: compiled.body };
+    }
+
+    const isGemini = aiProvider === 'gemini';
+    const prompt = `
+      You are writing a personalized outreach email for an internship.
+      Recipient details:
+      - Name: ${contact.name}
+      - Title: ${contact.title}
+      - Company: ${contact.company}
+      - Found Via: ${contact.foundVia}
+      - Extra notes: ${contact.notes || 'None'}
+      
+      Sender details:
+      - Name: ${profile.name}
+      - University/School: ${profile.university}
+      - Portfolio link: ${profile.portfolio || 'None'}
+      - Resume/Qualifications context: ${resumeText || 'None supplied'}
+
+      Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic.
+      If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
+
+      Subject Template: ${template.subject}
+      Body Template: ${template.body}
+
+      ${customInstruction ? `Specific user instructions to follow: ${customInstruction}` : ''}
+
+      Return your response as a valid JSON object ONLY. Make sure it contains exactly two keys: "subject" and "body". Do not wrap the JSON in markdown code blocks or ticks.
+    `;
+
+    if (isGemini) {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+      const data = await response.json();
+      const text = data.candidates[0].content.parts[0].text;
+      return JSON.parse(text);
+    } else {
+      // OpenAI
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: openAiModel || 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You write highly personalized outreach emails. You always return responses in JSON structure containing "subject" and "body" keys. Keep it concise, friendly, and professional.' },
+            { role: 'user', content: prompt }
+          ],
+          response_format: { type: "json_object" }
+        })
+      });
+
+      if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`);
+      const data = await response.json();
+      return JSON.parse(data.choices[0].message.content);
+    }
+  };
+
+  const handleGenerateAiMessage = async () => {
+    setGenerating(true);
+    try {
+      const result = await generateSingleDraftContext(aiContact, selectedTemplateId, aiPromptCustom);
       setContacts(contacts.map(c => {
         if (c.id === aiContact.id) {
           return {
             ...c,
-            emailDraftSubject: compiled.subject,
-            emailDraftBody: compiled.body,
+            emailDraftSubject: result.subject || 'Outreach',
+            emailDraftBody: result.body || '',
             status: 'Email Drafted'
           };
         }
         return c;
       }));
       setShowAiModal(false);
-      alert(`Draft offline-generated for ${aiContact.name}!`);
-      return;
-    }
-
-    // --- GEMINI FREE TIER GENERATOR ---
-    if (aiProvider === 'gemini') {
-      if (!geminiApiKey) {
-        alert('Please enter your Gemini API key in the Settings tab to use the free generation features.');
-        setTab('settings');
-        setShowAiModal(false);
-        return;
-      }
-
-      setGenerating(true);
-
-      const prompt = `
-        You are writing a personalized outreach email for an internship.
-        Recipient details:
-        - Name: ${aiContact.name}
-        - Title: ${aiContact.title}
-        - Company: ${aiContact.company}
-        - Found Via: ${aiContact.foundVia}
-        - Extra notes: ${aiContact.notes || 'None'}
-        
-        Sender details:
-        - Name: ${profile.name}
-        - University/School: ${profile.university}
-        - Portfolio link: ${profile.portfolio || 'None'}
-        - Resume/Qualifications context: ${resumeText || 'None supplied'}
-
-        Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic.
-        If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
-
-        Subject Template: ${template.subject}
-        Body Template: ${template.body}
-
-        ${aiPromptCustom ? `Specific user instructions to follow: ${aiPromptCustom}` : ''}
-
-        Return your response as a valid JSON object ONLY. Make sure it contains exactly two keys: "subject" and "body". Do not wrap the JSON in markdown code blocks or ticks.
-      `;
-
-      try {
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text: prompt }]
-            }],
-            generationConfig: {
-              responseMimeType: "application/json"
-            }
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`Gemini API returned error: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const text = data.candidates[0].content.parts[0].text;
-        const result = JSON.parse(text);
-
-        setContacts(contacts.map(c => {
-          if (c.id === aiContact.id) {
-            return {
-              ...c,
-              emailDraftSubject: result.subject || 'Outreach',
-              emailDraftBody: result.body || '',
-              status: 'Email Drafted'
-            };
-          }
-          return c;
-        }));
-
-        setShowAiModal(false);
-        alert(`Personalized draft successfully generated via Gemini Free Tier for ${aiContact.name}!`);
-      } catch (err) {
-        console.error(err);
-        alert(`Error generating message: ${err.message}`);
-      } finally {
-        setGenerating(false);
-      }
-      return;
-    }
-
-    // --- OPENAI PAID GENERATOR ---
-    if (aiProvider === 'openai') {
-      if (!apiKey) {
-        alert('Please enter your OpenAI API key in the Settings tab to generate AI outreach emails.');
-        setTab('settings');
-        setShowAiModal(false);
-        return;
-      }
-
-      setGenerating(true);
-      const prompt = `
-        You are writing a personalized outreach email for an internship.
-        Recipient details:
-        - Name: ${aiContact.name}
-        - Title: ${aiContact.title}
-        - Company: ${aiContact.company}
-        - Found Via: ${aiContact.foundVia}
-        - Extra Notes: ${aiContact.notes || 'None'}
-        
-        Sender's Name: ${profile.name}
-        Sender's University: ${profile.university}
-        Sender's Portfolio: ${profile.portfolio || 'None'}
-        Sender's Resume/Qualifications context: ${resumeText || 'None supplied'}
-        
-        We want to use this outreach template as inspiration, but customize it so it sounds completely natural, non-generic, highly personalized, and direct.
-        If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
-
-        Subject Template: ${template?.subject || 'Outreach'}
-        Body Template: ${template?.body || 'Hello...'}
-
-        ${aiPromptCustom ? `Specific Instructions from user: ${aiPromptCustom}` : ''}
-
-        Return response in JSON format:
-        {
-          "subject": "The email subject line here",
-          "body": "The complete email body here"
-        }
-      `;
-
-      try {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`
-          },
-          body: JSON.stringify({
-            model: openAiModel || 'gpt-4o-mini',
-            messages: [
-              { role: 'system', content: 'You write highly personalized outreach emails. You always return responses in JSON structure containing "subject" and "body" keys. Keep it concise, friendly, and professional.' },
-              { role: 'user', content: prompt }
-            ],
-            response_format: { type: "json_object" }
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status} ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const result = JSON.parse(data.choices[0].message.content);
-
-        setContacts(contacts.map(c => {
-          if (c.id === aiContact.id) {
-            return {
-              ...c,
-              emailDraftSubject: result.subject || 'Outreach',
-              emailDraftBody: result.body || '',
-              status: 'Email Drafted'
-            };
-          }
-          return c;
-        }));
-
-        setShowAiModal(false);
-        alert(`AI Draft successfully generated for ${aiContact.name}!`);
-      } catch (err) {
-        console.error(err);
-        alert(`Error generating message: ${err.message}`);
-      } finally {
-        setGenerating(false);
-      }
+      alert(`Outreach draft generated successfully for ${aiContact.name}!`);
+    } catch (err) {
+      console.error(err);
+      alert(`Draft generation failed: ${err.message}`);
+    } finally {
+      setGenerating(false);
     }
   };
 
-  // Bulk Email Sender
+  // Bulk Email Reviewer (reviews CONNECTED or DRAFTED sequentially)
   const handleOpenBulkSender = () => {
     const candidates = contacts.filter(c => 
       c.status === 'Connected' || c.status === 'Email Drafted'
     );
     if (candidates.length === 0) {
-      alert('No contacts in "Connected" or "Email Drafted" status available for bulk sending.');
+      alert('No contacts in "Connected" or "Email Drafted" status available for bulk review.');
       return;
     }
     setBulkContacts(candidates);
@@ -546,6 +497,135 @@ export default function Contacts({
     }
   };
 
+  // --- Mass Campaign Engine ---
+  const handleOpenCampaignModal = () => {
+    if (selectedContactIds.length === 0) {
+      alert('Please select at least one contact using the table row checkboxes first.');
+      return;
+    }
+    setCampaignStatus('idle');
+    setCampaignLogs([]);
+    setShowCampaignModal(true);
+  };
+
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const runCampaign = async () => {
+    setCampaignStatus('sending');
+    const logs = [];
+    const template = templates.find(t => t.id === campaignTemplateId) || templates[0];
+    
+    // Determine if background send via Gmail API is possible
+    const canSendDirect = !!gmailToken;
+    const ccVal = globalCc || '';
+    const bccVal = globalBcc || '';
+
+    // Loop through selected contact IDs sequentially
+    for (let i = 0; i < selectedContactIds.length; i++) {
+      setCampaignIndex(i);
+      const contactId = selectedContactIds[i];
+      const contact = contacts.find(c => c.id === contactId);
+
+      if (!contact) continue;
+
+      try {
+        logs.push(`Processing lead: ${contact.name} (${contact.email})...`);
+        setCampaignLogs([...logs]);
+
+        // 1. Compile or Generate email draft if missing or outdated
+        let subject = contact.emailDraftSubject;
+        let body = contact.emailDraftBody;
+
+        if (!subject || !body) {
+          logs.push(`Generating personalized AI draft context for ${contact.name}...`);
+          setCampaignLogs([...logs]);
+          const generated = await generateSingleDraftContext(contact, campaignTemplateId);
+          subject = generated.subject;
+          body = generated.body;
+        }
+
+        // 2. Dispatch email
+        if (canSendDirect) {
+          // Send background Gmail API request
+          logs.push(`Sending email via Gmail API directly to ${contact.email}...`);
+          setCampaignLogs([...logs]);
+          await sendDirectEmail(contact.email, subject, body, gmailToken, contact.cc || ccVal, contact.bcc || bccVal);
+          logs.push(`✅ Successfully sent to ${contact.name}!`);
+          
+          // Update status in master array
+          setContacts(prev => prev.map(c => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                emailDraftSubject: subject,
+                emailDraftBody: body,
+                status: 'Email Sent',
+                followUpDate: getSevenDaysLater()
+              };
+            }
+            return c;
+          }));
+        } else {
+          // Open sequential browser tab redirection
+          logs.push(`Opening web composer tab redirection for ${contact.email}...`);
+          setCampaignLogs([...logs]);
+          const composeUrl = getEmailClientComposeUrl(contact, subject, body);
+          window.open(composeUrl, '_blank');
+          logs.push(`✅ Opened tab compose for ${contact.name}.`);
+
+          setContacts(prev => prev.map(c => {
+            if (c.id === contactId) {
+              return {
+                ...c,
+                emailDraftSubject: subject,
+                emailDraftBody: body,
+                status: 'Email Sent',
+                followUpDate: getSevenDaysLater()
+              };
+            }
+            return c;
+          }));
+        }
+      } catch (err) {
+        console.error(err);
+        logs.push(`❌ Failed for ${contact.name}: ${err.message}`);
+      }
+
+      setCampaignLogs([...logs]);
+      
+      // Throttle delay of 2 seconds to respect API rate limits and avoid spam detection
+      if (i + 1 < selectedContactIds.length) {
+        await sleep(2000);
+      }
+    }
+
+    setCampaignStatus('completed');
+    setSelectedContactIds([]); // clear selection
+  };
+
+  // Row selection helpers
+  const handleSelectToggle = (id) => {
+    if (selectedContactIds.includes(id)) {
+      setSelectedContactIds(selectedContactIds.filter(selectedId => selectedId !== id));
+    } else {
+      setSelectedContactIds([...selectedContactIds, id]);
+    }
+  };
+
+  const handleSelectAllToggle = (filteredRows) => {
+    const filteredIds = filteredRows.map(r => r.id);
+    const allSelected = filteredIds.every(id => selectedContactIds.includes(id));
+
+    if (allSelected) {
+      // Deselect all visible
+      setSelectedContactIds(selectedContactIds.filter(id => !filteredIds.includes(id)));
+    } else {
+      // Select all visible
+      const combined = Array.from(new Set([...selectedContactIds, ...filteredIds]));
+      setSelectedContactIds(combined);
+    }
+  };
+
   // Filters and Search
   const filteredContacts = contacts.filter(c => {
     const matchesSearch = 
@@ -565,8 +645,13 @@ export default function Contacts({
           <p className="page-subtitle">Personalize your pitches, track follow-ups, and automate your outreach.</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
+          {selectedContactIds.length > 0 && (
+            <button className="btn btn-primary" onClick={handleOpenCampaignModal} style={{ background: 'var(--color-warning)', border: 'none' }}>
+              Mass Campaign ({selectedContactIds.length})
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={handleOpenBulkSender}>
-            Bulk Email Sender
+            Bulk Reviewer
           </button>
           <button className="btn btn-primary" onClick={handleOpenAddModal}>
             <Plus size={16} /> Add Contact
@@ -605,9 +690,16 @@ export default function Contacts({
         <table className="premium-table">
           <thead>
             <tr>
+              <th style={{ width: '40px', paddingLeft: '16px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={filteredContacts.length > 0 && filteredContacts.every(c => selectedContactIds.includes(c.id))}
+                  onChange={() => handleSelectAllToggle(filteredContacts)}
+                />
+              </th>
               <th>Contact Name</th>
               <th>Company & Title</th>
-              <th>Found Via</th>
+              <th>CC / BCC Copy</th>
               <th>Outreach Status</th>
               <th>Match Score</th>
               <th>Follow-Up Date</th>
@@ -617,7 +709,14 @@ export default function Contacts({
           </thead>
           <tbody>
             {filteredContacts.map(contact => (
-              <tr key={contact.id}>
+              <tr key={contact.id} className={selectedContactIds.includes(contact.id) ? 'selected-row' : ''}>
+                <td style={{ paddingLeft: '16px' }}>
+                  <input 
+                    type="checkbox"
+                    checked={selectedContactIds.includes(contact.id)}
+                    onChange={() => handleSelectToggle(contact.id)}
+                  />
+                </td>
                 <td>
                   <div style={{ fontWeight: 600 }}>{contact.name}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{contact.email}</div>
@@ -626,8 +725,9 @@ export default function Contacts({
                   <div>{contact.company}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{contact.title}</div>
                 </td>
-                <td style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                  {contact.foundVia}
+                <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  <div>CC: {contact.cc || globalCc || 'None'}</div>
+                  <div style={{ marginTop: '2px' }}>BCC: {contact.bcc || globalBcc || 'None'}</div>
                 </td>
                 <td>
                   <span className={`status-badge ${contact.status.toLowerCase().replace(' ', '-')}`}>
@@ -659,7 +759,7 @@ export default function Contacts({
                     {contact.emailDraftSubject ? (
                       <button 
                         className="btn-icon success" 
-                        title="Review and send email via Gmail compose"
+                        title="Review and send email"
                         onClick={() => setSelectedContactForEmail(contact)}
                       >
                         <Mail size={14} />
@@ -698,7 +798,7 @@ export default function Contacts({
 
             {filteredContacts.length === 0 && (
               <tr>
-                <td colSpan="8" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
+                <td colSpan="9" style={{ textAlign: 'center', padding: '32px', color: 'var(--text-muted)' }}>
                   No contacts found matching search filters.
                 </td>
               </tr>
@@ -739,6 +839,30 @@ export default function Contacts({
                       className="form-input"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div className="form-group">
+                    <label className="form-label">Custom CC (Overrides Default CC)</label>
+                    <input 
+                      type="email" 
+                      className="form-input"
+                      placeholder="e.g. tracking@uni.edu"
+                      value={formData.cc}
+                      onChange={(e) => setFormData({ ...formData, cc: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Custom BCC (Overrides Default BCC)</label>
+                    <input 
+                      type="email" 
+                      className="form-input"
+                      placeholder="e.g. bcc@archive.com"
+                      value={formData.bcc}
+                      onChange={(e) => setFormData({ ...formData, bcc: e.target.value })}
                     />
                   </div>
                 </div>
@@ -825,7 +949,7 @@ export default function Contacts({
                       max="100" 
                       className="form-input"
                       value={formData.score}
-                      onChange={(e) => setFormData({ ...formData, score: parseInt(e.target.value) })}
+                      onChange={(e) => setFormData({ ...formData, score: parseInt(e.target.value) || 70 })}
                     />
                   </div>
                 </div>
@@ -942,7 +1066,7 @@ export default function Contacts({
         </div>
       )}
 
-      {/* Bulk Email Sender Modal (with both Direct Send & Web Compose) */}
+      {/* Sequential Bulk Email Reviewer Modal */}
       {showBulkModal && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: '700px' }}>
@@ -1015,7 +1139,7 @@ export default function Contacts({
                   disabled={!bulkContacts[bulkIndex]?.emailDraftSubject}
                   onClick={handleBulkApproveComposeTab}
                 >
-                  Approve & Open Compose Tab
+                  Approve & Open Composer Tab
                 </button>
                 {gmailToken && (
                   <button 
@@ -1034,6 +1158,97 @@ export default function Contacts({
         </div>
       )}
 
+      {/* Mass Campaign Dispatcher Modal */}
+      {showCampaignModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '650px' }}>
+            <div className="modal-header">
+              <h2 className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Play size={18} style={{ color: 'var(--color-warning)' }} />
+                Execute Outreach Campaign ({selectedContactIds.length} Selected Leads)
+              </h2>
+              <button className="btn-icon" onClick={() => setShowCampaignModal(false)} disabled={campaignStatus === 'sending'}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="modal-body">
+              {campaignStatus === 'idle' ? (
+                <>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                    Launch an automated outreach run to the {selectedContactIds.length} selected recipients. The platform will dynamically compile or AI-generate drafts for any contacts missing customized email bodies before sending.
+                  </p>
+
+                  <div className="form-group">
+                    <label className="form-label">Outreach Pitch Template</label>
+                    <select 
+                      className="form-select"
+                      value={campaignTemplateId}
+                      onChange={(e) => setCampaignTemplateId(e.target.value)}
+                    >
+                      {templates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '10px', fontSize: '0.8rem' }}>
+                    <div>
+                      <strong>Sender Account:</strong> {gmailToken ? 'Direct Gmail API (Connected)' : `Browser Redirection Client (${emailClient})`}
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                        {gmailToken 
+                          ? 'Campaign will run fully in the background automatically.' 
+                          : 'Campaign will open a series of pre-filled composer browser tabs sequentially.'}
+                      </div>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', fontSize: '0.85rem' }}>
+                    <strong>Campaign Dispatch Status:</strong>
+                    <span>{campaignIndex + 1} of {selectedContactIds.length} processed</span>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div style={{ width: '100%', height: '8px', background: 'var(--border)', borderRadius: '4px', overflow: 'hidden', marginBottom: '20px' }}>
+                    <div style={{ 
+                      width: `${((campaignIndex + (campaignStatus === 'completed' ? 1 : 0)) / selectedContactIds.length) * 100}%`, 
+                      height: '100%', 
+                      background: 'var(--color-success)', 
+                      transition: 'width 0.3s ease' 
+                    }} />
+                  </div>
+
+                  {/* Logs console */}
+                  <div style={{ height: '220px', background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '12px', overflowY: 'auto', fontFamily: 'monospace', fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {campaignLogs.map((log, idx) => (
+                      <div key={idx} className={log.includes('❌') ? 'color-danger' : log.includes('✅') ? 'color-success' : ''}>
+                        {log}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn btn-secondary" 
+                onClick={() => setShowCampaignModal(false)}
+                disabled={campaignStatus === 'sending'}
+              >
+                {campaignStatus === 'completed' ? 'Close' : 'Cancel'}
+              </button>
+              {campaignStatus === 'idle' && (
+                <button type="button" className="btn btn-primary" onClick={runCampaign}>
+                  Launch Outreach Campaign
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Review Individual Email Draft Modal */}
       {selectedContactForEmail && (
         <div className="modal-overlay">
@@ -1045,15 +1260,33 @@ export default function Contacts({
               </button>
             </div>
             <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">Recipient Email</label>
-                <input 
-                  type="text" 
-                  disabled 
-                  className="form-input" 
-                  style={{ opacity: 0.7 }}
-                  value={selectedContactForEmail.email}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div className="form-group">
+                  <label className="form-label">Recipient Email</label>
+                  <input 
+                    type="text" 
+                    disabled 
+                    className="form-input" 
+                    style={{ opacity: 0.7 }}
+                    value={selectedContactForEmail.email}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Recipient CC (Copy)</label>
+                  <input 
+                    type="email" 
+                    className="form-input" 
+                    placeholder="None"
+                    value={selectedContactForEmail.cc || globalCc || ''}
+                    onChange={(e) => {
+                      const newCc = e.target.value;
+                      setContacts(contacts.map(c => 
+                        c.id === selectedContactForEmail.id ? { ...c, cc: newCc } : c
+                      ));
+                      setSelectedContactForEmail({ ...selectedContactForEmail, cc: newCc });
+                    }}
+                  />
+                </div>
               </div>
 
               <div className="form-group">
@@ -1093,10 +1326,10 @@ export default function Contacts({
               <button 
                 type="button" 
                 className="btn btn-secondary"
-                onClick={() => handleSendGmail(selectedContactForEmail)}
+                onClick={() => handleSendGmail(selectedContactForEmail, selectedContactForEmail.emailDraftSubject, selectedContactForEmail.emailDraftBody)}
                 style={{ gap: '6px' }}
               >
-                Gmail Compose Tab <ExternalLink size={14} />
+                Send via {emailClient === 'gmail' ? 'Gmail Web' : emailClient === 'outlook' ? 'Outlook Web' : 'Default Mail'} <ExternalLink size={14} />
               </button>
               {gmailToken && (
                 <button 
