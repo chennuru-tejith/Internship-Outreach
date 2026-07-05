@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, Mail, BarChart3, 
-  Upload, Settings as SettingsIcon, AlertCircle, ShieldAlert, Search 
+  Upload, Settings as SettingsIcon, AlertCircle, ShieldAlert, Search, FileText 
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -12,6 +12,7 @@ import Analytics from './components/Analytics';
 import CSVImporter from './components/CSVImporter';
 import Settings from './components/Settings';
 import LeadFinder from './components/LeadFinder';
+import ResumeAnalyzer from './components/ResumeAnalyzer';
 
 import { initialCompanies, initialContacts, initialTemplates } from './mockData';
 
@@ -203,6 +204,12 @@ export default function App() {
               <Search /> Lead Finder
             </li>
             <li 
+              className={`sidebar-item ${selectedTab === 'analyzer' ? 'active' : ''}`}
+              onClick={() => setSelectedTab('analyzer')}
+            >
+              <FileText /> Resume Analyzer
+            </li>
+            <li 
               className={`sidebar-item ${selectedTab === 'companies' ? 'active' : ''}`}
               onClick={() => setSelectedTab('companies')}
             >
@@ -249,7 +256,7 @@ export default function App() {
             </div>
           )}
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', paddingBottom: '4px' }}>
-            Outreach Platform v1.3.0
+            Outreach Platform v1.4.0
           </div>
         </div>
       </aside>
@@ -294,6 +301,12 @@ export default function App() {
             contacts={contacts} 
             setContacts={setContacts} 
             setTab={handleSetTab}
+          />
+        )}
+        {selectedTab === 'analyzer' && (
+          <ResumeAnalyzer 
+            resumeText={resumeText} 
+            setResumeText={setResumeText} 
           />
         )}
         {selectedTab === 'companies' && (

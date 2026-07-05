@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Globe, Plus, ExternalLink, HelpCircle, Briefcase, MapPin } from 'lucide-react';
+import { Search, Globe, Plus, ExternalLink, Briefcase, MapPin } from 'lucide-react';
 
 const Linkedin = ({ size = 24, ...props }) => (
   <svg 
@@ -34,7 +34,6 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
   };
 
   const getGoogleSearchUrl = () => {
-    // Google dork to find public profiles
     const query = `site:linkedin.com/in/ "${leadType}" "${company}" "${location}" "${role}"`;
     return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
   };
@@ -54,6 +53,14 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
       const mockFirstNames = ['David', 'Sarah', 'Jessica', 'Michael', 'James', 'Emily', 'Daniel', 'Sophia', 'Robert', 'Emma'];
       const mockLastNames = ['Chen', 'Smith', 'Taylor', 'Johnson', 'Miller', 'Rodriguez', 'Patel', 'Jones', 'Davies', 'Kim'];
       
+      const reasons = [
+        `Shared alumni network links with your university profile.`,
+        `Active hiring recruiter for engineering divisions in ${location}.`,
+        `Frequently post about junior developer and internship openings.`,
+        `Engineering leader overseeing teams matching your tech stack.`,
+        `Key point-of-contact for student outreach at ${company}.`
+      ];
+
       const generated = [];
       const count = Math.floor(Math.random() * 3) + 2; // Generate 2-4 potential leads
 
@@ -63,7 +70,8 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
         const fullName = `${fName} ${lName}`;
         const email = `${fName.toLowerCase()}.${lName.toLowerCase()}@${company.toLowerCase().replace(/[^a-z0-9]/g, '')}.com`;
         const linkedinUrl = `https://www.linkedin.com/in/${fName.toLowerCase()}-${lName.toLowerCase()}-${company.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
-        
+        const matchReason = reasons[Math.floor(Math.random() * reasons.length)];
+
         generated.push({
           id: 'scout_' + Math.random().toString(36).substr(2, 5),
           name: fullName,
@@ -73,7 +81,8 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
           linkedin: linkedinUrl,
           foundVia: 'Lead Finder Tab',
           score: Math.floor(Math.random() * 20) + 75, // 75-95 match score
-          location: location
+          location: location,
+          matchReason: matchReason
         });
       }
 
@@ -93,6 +102,8 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
       id: 'ct_' + Math.random().toString(36).substr(2, 9),
       name: lead.name,
       email: lead.email,
+      cc: '',
+      bcc: '',
       company: lead.company,
       title: lead.title,
       linkedin: lead.linkedin,
@@ -103,7 +114,7 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
       responseNotes: '',
       emailDraftSubject: '',
       emailDraftBody: '',
-      notes: `Scouted lead for ${role} role at ${company} in ${location}.`
+      notes: `Scouted for ${role}. Match context: ${lead.matchReason}`
     };
 
     setContacts([newContact, ...contacts]);
@@ -236,6 +247,7 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
                     <div>
                       <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{lead.name}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{lead.title}</div>
+                      
                       <div style={{ display: 'flex', gap: '12px', fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '6px' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <Briefcase size={10} /> {lead.company}
@@ -244,6 +256,12 @@ export default function LeadFinder({ contacts, setContacts, setTab }) {
                           <MapPin size={10} /> {lead.location}
                         </span>
                       </div>
+
+                      {lead.matchReason && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--primary-light)', marginTop: '6px', fontStyle: 'italic' }}>
+                          💡 Match context: {lead.matchReason}
+                        </div>
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

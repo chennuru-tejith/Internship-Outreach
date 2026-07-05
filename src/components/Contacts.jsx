@@ -207,6 +207,21 @@ export default function Contacts({
     setShowAddEditModal(false);
   };
 
+  const handlePostponeFollowUp = (contactId, days) => {
+    setContacts(contacts.map(c => {
+      if (c.id === contactId) {
+        const baseDate = c.followUpDate ? new Date(c.followUpDate) : new Date();
+        const start = isNaN(baseDate.getTime()) ? new Date() : baseDate;
+        start.setDate(start.getDate() + days);
+        return {
+          ...c,
+          followUpDate: start.toISOString().split('T')[0]
+        };
+      }
+      return c;
+    }));
+  };
+
   // Compile deep link URLs based on selected client (Gmail, Outlook, Default Mailto) and CC/BCC
   const getEmailClientComposeUrl = (contact, subject, body) => {
     const to = contact.email;
@@ -724,6 +739,14 @@ export default function Contacts({
                 <td>
                   <div>{contact.company}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{contact.title}</div>
+                  {contact.notes && (
+                    <div 
+                      style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontStyle: 'italic', marginTop: '4px', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={contact.notes}
+                    >
+                      "{contact.notes}"
+                    </div>
+                  )}
                 </td>
                 <td style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   <div>CC: {contact.cc || globalCc || 'None'}</div>
@@ -740,11 +763,33 @@ export default function Contacts({
                   </span>
                 </td>
                 <td style={{ fontSize: '0.8rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Calendar size={12} className="text-secondary" />
-                    <span className={contact.followUpDate && contact.followUpDate < todayStr && contact.status !== 'Offer' ? 'color-danger' : ''}>
-                      {contact.followUpDate ? contact.followUpDate : 'Not Set'}
-                    </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calendar size={12} className="text-secondary" />
+                      <span className={contact.followUpDate && contact.followUpDate < todayStr && contact.status !== 'Offer' ? 'color-danger' : ''}>
+                        {contact.followUpDate ? contact.followUpDate : 'Not Set'}
+                      </span>
+                    </div>
+                    {contact.followUpDate && contact.status !== 'Offer' && (
+                      <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
+                        <button 
+                          className="btn-tiny" 
+                          style={{ fontSize: '0.65rem', padding: '1px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                          onClick={() => handlePostponeFollowUp(contact.id, 3)}
+                          title="Postpone follow-up by 3 days"
+                        >
+                          +3d
+                        </button>
+                        <button 
+                          className="btn-tiny" 
+                          style={{ fontSize: '0.65rem', padding: '1px 4px', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: '4px', cursor: 'pointer', color: 'var(--text-secondary)' }}
+                          onClick={() => handlePostponeFollowUp(contact.id, 7)}
+                          title="Postpone follow-up by 7 days"
+                        >
+                          +7d
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </td>
                 <td>
