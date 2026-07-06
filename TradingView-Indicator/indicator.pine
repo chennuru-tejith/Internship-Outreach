@@ -1,0 +1,94 @@
+//@version=5
+indicator("Advanced Buy/Sell Predictor with Volume Dashboard", overlay=true)
+
+// ==========================================
+// 1. INPUT PARAMETERS
+// ==========================================
+fastEMALen = input.int(9, title="Fast EMA Length", minval=1)
+slowEMALen = input.int(21, title="Slow EMA Length", minval=1)
+rsiLen     = input.int(14, title="RSI Length", minval=1)
+rsiOverbought = input.int(70, title="RSI Overbought Level", minval=50, maxval=100)
+rsiOversold   = input.int(30, title="RSI Oversold Level", minval=0, maxval=50)
+volMaLen   = input.int(20, title="Volume MA Length", minval=1)
+volMult    = input.float(1.5, title="Volume Surge Multiplier", minval=1.0)
+
+// ==========================================
+// 2. INDICATOR CALCULATIONS
+// ==========================================
+fastEMA = ta.ema(close, fastEMALen)
+slowEMA = ta.ema(close, slowEMALen)
+rsiVal  = ta.rsi(close, rsiLen)
+avgVol  = ta.sma(volume, volMaLen)
+
+// Crossover & Volume Surge Signals
+emaBullish = fastEMA > slowEMA
+emaCrossUp = ta.crossover(fastEMA, slowEMA)
+emaCrossDown = ta.crossunder(fastEMA, slowEMA)
+volSurge = volume > (avgVol * volMult)
+
+// Define Buy/Sell Rules
+buySignal  = emaCrossUp and rsiVal < rsiOverbought
+sellSignal = (emaCrossDown or (rsiVal > rsiOverbought and ta.crossunder(rsiVal, rsiOverbought)))
+
+// ==========================================
+// 3. CHART PLOT & LABELS
+// ==========================================
+plot(fastEMA, color=color.blue, title="Fast EMA", linewidth=1)
+plot(slowEMA, color=color.orange, title="Slow EMA", linewidth=1)
+
+// Plot Buy/Sell shapes on crossovers
+plotshape(buySignal, title="Buy Signal", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small, text="BUY")
+plotshape(sellSignal, title="Sell Signal", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, text="SELL")
+
+// Highlight background on volume surges
+bgcolor(volSurge ? color.new(color.yellow, 92) : na, title="Volume Surge Highlight")
+
+// ==========================================
+// 4. SIDE PANEL DASHBOARD (Pine Tables)
+// ==========================================
+var table dashTable = table.new(position.top_right, 2, 7, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
+
+// Update dashboard on the last historical bar
+if barstate.islast
+    // Header Style Helper
+    f_set_cell(tbl, col, row, txt, bg_col, txt_col) =>
+        table.cell(tbl, col, row, txt, text_color=txt_col, bgcolor=bg_col, text_size=size.small, text_halign=text.align_left)
+
+    // Table Header
+    table.cell(dashTable, 0, 0, "TECHNICAL METRICS", text_color=color.white, bgcolor=color.navy, text_size=size.small, text_halign=text.align_center)
+    table.cell(dashTable, 1, 0, "STATUS / VALUE", text_color=color.white, bgcolor=color.navy, text_size=size.small, text_halign=text.align_center)
+
+    // 1. Trend Direction
+    trendText = emaBullish ? "BULLISH" : "BEARISH"
+    trendColor = emaBullish ? color.green : color.red
+    f_set_cell(dashTable, 0, 1, "Trend Alignment", color.gray, color.white)
+    f_set_cell(dashTable, 1, 1, trendText, trendColor, color.white)
+
+    // 2. Momentum (RSI)
+    rsiState = rsiVal > rsiOverbought ? "OVERBOUGHT" : rsiVal < rsiOversold ? "OVERSOLD" : "NEUTRAL"
+    rsiColor = rsiVal > rsiOverbought ? color.red : rsiVal < rsiOversold ? color.green : color.orange
+    f_set_cell(dashTable, 0, 2, "RSI (14)", color.gray, color.white)
+    f_set_cell(dashTable, 1, 2, str.tostring(rsiVal, "#.##") + " (" + rsiState + ")", rsiColor, color.white)
+
+    // 3. Volume Surge Status
+    volText = volSurge ? "SURGE ACTIVE" : "NORMAL"
+    volColor = volSurge ? color.purple : color.gray
+    f_set_cell(dashTable, 0, 3, "Volume Status", color.gray, color.white)
+    f_set_cell(dashTable, 1, 3, volText, volColor, color.white)
+
+    // 4. Calculated Action Signal
+    actionText = buySignal ? "STRONG BUY" : sellSignal ? "STRONG SELL" : (emaBullish and rsiVal < 60) ? "HOLD / ACCUMULATE" : "NO ACTIVE SIGNAL"
+    actionColor = buySignal ? color.green : sellSignal ? color.red : color.orange
+    f_set_cell(dashTable, 0, 4, "Action Signal", color.gray, color.white)
+    f_set_cell(dashTable, 1, 4, actionText, actionColor, color.white)
+
+    // 5. Simulated News & Insights Panel
+    insightText = buySignal ? "Bullish crossover on volume surge. High probability uptrend starting." :
+                  sellSignal ? "Bearish crossover or momentum exhaust. Take profit / hedge positions." :
+                  volSurge ? "High institutional volume sweep detected. Expect volatility." :
+                  "Range-bound consolidation. Awaiting moving average breakout."
+    table.cell(dashTable, 0, 5, "INSIGHTS & MARKET PROFILE", text_color=color.yellow, bgcolor=color.navy, text_size=size.small, text_halign=text.align_center)
+    table.merge_cells(dashTable, 0, 5, 1, 5)
+    
+    table.cell(dashTable, 0, 6, insightText, text_color=color.white, bgcolor=color.new(color.gray, 80), text_size=size.small, text_halign=text.align_left)
+    table.merge_cells(dashTable, 0, 6, 1, 6)
