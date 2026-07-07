@@ -79,6 +79,16 @@ export default function App() {
     return localStorage.getItem('crm_global_bcc') || '';
   });
 
+  // Custom User-defined replacement placeholders
+  const [customPlaceholders, setCustomPlaceholders] = useState(() => {
+    const local = localStorage.getItem('crm_custom_placeholders');
+    return local ? JSON.parse(local) : [
+      { key: '[GPA]', value: '3.9' },
+      { key: '[Class Name]', value: 'Software Engineering' },
+      { key: '[Favorite Project]', value: 'AI CRM Outreach Platform' }
+    ];
+  });
+
   const [selectedTab, setSelectedTab] = useState('dashboard');
   const [selectedContactForEmail, setSelectedContactForEmail] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
@@ -141,6 +151,10 @@ export default function App() {
     localStorage.setItem('crm_global_bcc', globalBcc);
   }, [globalBcc]);
 
+  useEffect(() => {
+    localStorage.setItem('crm_custom_placeholders', JSON.stringify(customPlaceholders));
+  }, [customPlaceholders]);
+
   const resetDatabase = () => {
     localStorage.removeItem('crm_contacts');
     localStorage.removeItem('crm_companies');
@@ -155,6 +169,7 @@ export default function App() {
     localStorage.removeItem('crm_email_client');
     localStorage.removeItem('crm_global_cc');
     localStorage.removeItem('crm_global_bcc');
+    localStorage.removeItem('crm_custom_placeholders');
   };
 
   const handleSetTab = (tab) => {
@@ -284,6 +299,7 @@ export default function App() {
             openAiModel={openAiModel}
             profile={profile}
             resumeText={resumeText}
+            customPlaceholders={customPlaceholders}
             setTab={handleSetTab}
             selectedContactForEmail={selectedContactForEmail}
             setSelectedContactForEmail={setSelectedContactForEmail}
@@ -348,6 +364,8 @@ export default function App() {
             setProfile={setProfile}
             resumeText={resumeText}
             setResumeText={setResumeText}
+            customPlaceholders={customPlaceholders}
+            setCustomPlaceholders={setCustomPlaceholders}
             resetDatabase={resetDatabase}
             googleClientId={googleClientId}
             setGoogleClientId={setGoogleClientId}
@@ -359,6 +377,12 @@ export default function App() {
             setGlobalCc={setGlobalCc}
             globalBcc={globalBcc}
             setGlobalBcc={setGlobalBcc}
+            contacts={contacts}
+            companies={companies}
+            templates={templates}
+            setContacts={setContacts}
+            setCompanies={setCompanies}
+            setTemplates={setTemplates}
           />
         )}
       </main>

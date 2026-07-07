@@ -42,7 +42,8 @@ export default function Contacts({
   setGmailToken,
   emailClient,
   globalCc,
-  globalBcc
+  globalBcc,
+  customPlaceholders
 }) {
   const [search, setSearch] = useState('');
   
@@ -124,6 +125,16 @@ export default function Contacts({
       subject = subject.replace(regex, value);
       body = body.replace(regex, value);
     });
+
+    // Dynamic user-defined custom placeholders replacement
+    if (customPlaceholders && Array.isArray(customPlaceholders)) {
+      customPlaceholders.forEach(p => {
+        const escapedKey = p.key.replace(/\[/g, '\\[').replace(/\]/g, '\\]');
+        const regex = new RegExp(escapedKey, 'gi');
+        subject = subject.replace(regex, p.value || '');
+        body = body.replace(regex, p.value || '');
+      });
+    }
 
     return { subject, body };
   };
@@ -370,12 +381,16 @@ export default function Contacts({
   const generateSingleDraftContext = async (contact, templateId, customInstruction = '') => {
     const template = templates.find(t => t.id === templateId) || templates[0];
     
-    if (aiProvider === 'local') {
+    // Check if key is missing and fall back
+    const isGemini = aiProvider === 'gemini';
+    const isOpenAi = aiProvider === 'openai';
+    const needsFallback = (isGemini && !geminiApiKey) || (isOpenAi && !apiKey);
+
+    if (aiProvider === 'local' || needsFallback) {
       const compiled = compileLocalTemplate(template, contact, profile);
-      return { subject: compiled.subject, body: compiled.body };
+      return { subject: compiled.subject, body: compiled.body, wasFallback: needsFallback };
     }
 
-    const isGemini = aiProvider === 'gemini';
     const prompt = `
       You are writing a personalized outreach email for an internship.
       Recipient details:
@@ -390,6 +405,7 @@ export default function Contacts({
       - University/School: ${profile.university}
       - Portfolio link: ${profile.portfolio || 'None'}
       - Resume/Qualifications context: ${resumeText || 'None supplied'}
+      - Custom Placeholders context: ${JSON.stringify(customPlaceholders)}
 
       Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic.
       If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
@@ -456,10 +472,29 @@ export default function Contacts({
         return c;
       }));
       setShowAiModal(false);
-      alert(`Outreach draft generated successfully for ${aiContact.name}!`);
+      
+      if (result.wasFallback) {
+        alert(`API key was missing for ${aiProvider}. Automatically compiled the draft locally using your placeholders instead!`);
+      } else {
+        alert(`Outreach draft generated successfully for ${aiContact.name}!`);
+      }
     } catch (err) {
       console.error(err);
-      alert(`Draft generation failed: ${err.message}`);
+      alert(`Draft generation failed: ${err.message}. Falling back to local template compiler...`);
+      const template = templates.find(t => t.id === selectedTemplateId) || templates[0];
+      const compiled = compileLocalTemplate(template, aiContact, profile);
+      setContacts(contacts.map(c => {
+        if (c.id === aiContact.id) {
+          return {
+            ...c,
+            emailDraftSubject: compiled.subject,
+            emailDraftBody: compiled.body,
+            status: 'Email Drafted'
+          };
+        }
+        return c;
+      }));
+      setShowAiModal(false);
     } finally {
       setGenerating(false);
     }

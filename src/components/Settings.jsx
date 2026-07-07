@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, FileText, Settings as ConfigIcon } from 'lucide-react';
+import { Key, Eye, EyeOff, Save, RefreshCw, User, ShieldCheck, Mail, FileText, Settings as ConfigIcon, Download, Upload, Plus, Trash2 } from 'lucide-react';
 
 export default function Settings({ 
   apiKey, 
@@ -24,7 +24,15 @@ export default function Settings({
   globalCc,
   setGlobalCc,
   globalBcc,
-  setGlobalBcc
+  setGlobalBcc,
+  customPlaceholders,
+  setCustomPlaceholders,
+  contacts,
+  companies,
+  templates,
+  setContacts,
+  setCompanies,
+  setTemplates
 }) {
   const [showOpenAiKey, setShowOpenAiKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
@@ -39,6 +47,9 @@ export default function Settings({
   const [localEmailClient, setLocalEmailClient] = useState(emailClient);
   const [localGlobalCc, setLocalGlobalCc] = useState(globalCc);
   const [localGlobalBcc, setLocalGlobalBcc] = useState(globalBcc);
+  const [localPlaceholders, setLocalPlaceholders] = useState([...customPlaceholders]);
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
   const [saved, setSaved] = useState(false);
 
   const handleSave = (e) => {
@@ -53,6 +64,7 @@ export default function Settings({
     setEmailClient(localEmailClient);
     setGlobalCc(localGlobalCc);
     setGlobalBcc(localGlobalBcc);
+    setCustomPlaceholders(localPlaceholders);
     
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -89,6 +101,139 @@ export default function Settings({
     }
   };
 
+  // --- Dynamic Placeholder Handlers ---
+  const handleAddPlaceholder = () => {
+    let cleanKey = newKey.trim();
+    if (!cleanKey || !newValue.trim()) {
+      alert('Please enter both placeholder tag name and value.');
+      return;
+    }
+    // Auto-wrap in brackets if missing
+    if (!cleanKey.startsWith('[')) cleanKey = '[' + cleanKey;
+    if (!cleanKey.endsWith(']')) cleanKey = cleanKey + ']';
+
+    if (localPlaceholders.some(p => p.key.toLowerCase() === cleanKey.toLowerCase())) {
+      alert('This placeholder tag already exists.');
+      return;
+    }
+
+    setLocalPlaceholders([...localPlaceholders, { key: cleanKey, value: newValue.trim() }]);
+    setNewKey('');
+    setNewValue('');
+  };
+
+  const handleDeletePlaceholder = (keyToDelete) => {
+    setLocalPlaceholders(localPlaceholders.filter(p => p.key !== keyToDelete));
+  };
+
+  // --- Data Backup & Recovery Handlers ---
+  const handleExportBackup = () => {
+    const backupData = {
+      contacts,
+      companies,
+      templates,
+      profile: localProfile,
+      resumeText: localResumeText,
+      customPlaceholders: localPlaceholders,
+      emailClient: localEmailClient,
+      globalCc: localGlobalCc,
+      globalBcc: localGlobalBcc,
+      googleClientId: localGoogleClientId,
+      aiProvider: localProvider,
+      openAiModel: localModel,
+      apiKey: localOpenAiKey,
+      geminiApiKey: localGeminiKey
+    };
+
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `outreach_crm_backup_${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportBackup = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!window.confirm('WARNING: Importing this backup will overwrite all your current leads, target companies, and configuration settings in local storage. Do you want to proceed?')) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target.result);
+        
+        // Hydrate React states & triggers localStorage updates
+        if (data.contacts) {
+          setContacts(data.contacts);
+          localStorage.setItem('crm_contacts', JSON.stringify(data.contacts));
+        }
+        if (data.companies) {
+          setCompanies(data.companies);
+          localStorage.setItem('crm_companies', JSON.stringify(data.companies));
+        }
+        if (data.templates) {
+          setTemplates(data.templates);
+          localStorage.setItem('crm_templates', JSON.stringify(data.templates));
+        }
+        if (data.profile) {
+          setProfile(data.profile);
+          localStorage.setItem('crm_profile', JSON.stringify(data.profile));
+        }
+        if (data.resumeText !== undefined) {
+          setResumeText(data.resumeText);
+          localStorage.setItem('crm_resume_text', data.resumeText);
+        }
+        if (data.customPlaceholders) {
+          setCustomPlaceholders(data.customPlaceholders);
+          localStorage.setItem('crm_custom_placeholders', JSON.stringify(data.customPlaceholders));
+        }
+        if (data.emailClient) {
+          setEmailClient(data.emailClient);
+          localStorage.setItem('crm_email_client', data.emailClient);
+        }
+        if (data.globalCc !== undefined) {
+          setGlobalCc(data.globalCc);
+          localStorage.setItem('crm_global_cc', data.globalCc);
+        }
+        if (data.globalBcc !== undefined) {
+          setGlobalBcc(data.globalBcc);
+          localStorage.setItem('crm_global_bcc', data.globalBcc);
+        }
+        if (data.googleClientId !== undefined) {
+          setGoogleClientId(data.googleClientId);
+          localStorage.setItem('crm_google_client_id', data.googleClientId);
+        }
+        if (data.aiProvider) {
+          setAiProvider(data.aiProvider);
+          localStorage.setItem('crm_ai_provider', data.aiProvider);
+        }
+        if (data.openAiModel) {
+          setOpenAiModel(data.openAiModel);
+          localStorage.setItem('crm_openai_model', data.openAiModel);
+        }
+        if (data.apiKey !== undefined) {
+          setApiKey(data.apiKey);
+          localStorage.setItem('crm_api_key', data.apiKey);
+        }
+        if (data.geminiApiKey !== undefined) {
+          setGeminiApiKey(data.geminiApiKey);
+          localStorage.setItem('crm_gemini_api_key', data.geminiApiKey);
+        }
+
+        alert('Outreach CRM database successfully restored! Reloading page...');
+        window.location.reload();
+      } catch (err) {
+        alert(`Failed to parse backup file: ${err.message}. Please upload a valid JSON backup.`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const handleReset = () => {
     if (window.confirm('WARNING: This will clear all your custom contacts, companies, and templates, resetting the local database to the default demo values. Do you want to proceed?')) {
       resetDatabase();
@@ -110,6 +255,31 @@ export default function Settings({
           <span>Settings saved successfully! Personalizations will apply to all future email drafts.</span>
         </div>
       )}
+
+      {/* Backup and Restore Box */}
+      <div className="card-panel" style={{ marginBottom: '24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <h2 className="panel-title">
+          <Download size={18} /> Database Backup & Recovery (Safety Panel)
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          Since all outreach leads are saved inside your browser cache (`localStorage`), clearing cache deletes your data. Download a backup file regularly to ensure your leads list is safe.
+        </p>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+          <button type="button" className="btn btn-secondary" onClick={handleExportBackup} style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <Download size={14} /> Export Backup (JSON)
+          </button>
+          
+          <label className="btn btn-secondary" style={{ display: 'flex', gap: '8px', alignItems: 'center', cursor: 'pointer', margin: 0 }}>
+            <Upload size={14} /> Import Backup (JSON)
+            <input 
+              type="file" 
+              accept=".json" 
+              style={{ display: 'none' }} 
+              onChange={handleImportBackup} 
+            />
+          </label>
+        </div>
+      </div>
 
       <form onSubmit={handleSave} className="card-panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: 0 }}>
@@ -213,6 +383,73 @@ export default function Settings({
             <strong>Local Substitution Mode Active:</strong> This mode will compile your outreach drafts instantly on your machine for free, by replacing tags like <code>[Contact Name]</code>, <code>[Company Name]</code>, and <code>[Your Name]</code> with actual lead data. No internet or API keys are required.
           </div>
         )}
+
+        {/* Custom Replacement Placeholders Panel */}
+        <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
+          <FileText size={18} /> Custom Template Placeholders
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          Create custom replacement values to substitute dynamic sections in your templates. Placeholders must be declared in brackets (e.g. <code>[GPA]</code> or <code>[Project Title]</code>).
+        </p>
+
+        {/* List of custom placeholders */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {localPlaceholders.map(p => (
+            <div key={p.key} style={{ display: 'flex', gap: '12px', alignItems: 'center', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', padding: '8px 12px', borderRadius: '8px' }}>
+              <span style={{ fontFamily: 'monospace', fontSize: '0.85rem', fontWeight: 600, color: 'var(--primary)', flexShrink: 0 }}>
+                {p.key}
+              </span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', flexGrow: 1 }}>
+                {p.value}
+              </span>
+              <button 
+                type="button" 
+                className="btn-icon" 
+                onClick={() => handleDeletePlaceholder(p.key)}
+                style={{ color: 'var(--color-danger)' }}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+          {localPlaceholders.length === 0 && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              No custom placeholders defined. Add one below to use it.
+            </div>
+          )}
+        </div>
+
+        {/* Add new placeholder form */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', padding: '12px', borderRadius: '10px' }}>
+          <div className="form-group" style={{ margin: 0, flex: 1 }}>
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>Placeholder Tag</label>
+            <input 
+              type="text" 
+              className="form-input" 
+              placeholder="e.g. [GPA]" 
+              value={newKey}
+              onChange={(e) => setNewKey(e.target.value)}
+            />
+          </div>
+          <div className="form-group" style={{ margin: 0, flex: 1.5 }}>
+            <label className="form-label" style={{ fontSize: '0.75rem' }}>Replacement Value</label>
+            <input 
+              type="text" 
+              className="form-input" 
+              placeholder="e.g. 3.92" 
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+            />
+          </div>
+          <button 
+            type="button" 
+            className="btn btn-secondary" 
+            onClick={handleAddPlaceholder}
+            style={{ display: 'flex', gap: '6px', alignItems: 'center' }}
+          >
+            <Plus size={14} /> Add
+          </button>
+        </div>
 
         {/* Email Client & Default CC/BCC Configuration */}
         <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
