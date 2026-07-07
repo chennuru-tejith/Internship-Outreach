@@ -617,10 +617,16 @@ body {
 
 .premium-table tbody tr {
   transition: var(--transition-fast);
+  border-left: 2px solid transparent;
 }
 
 .premium-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
+}
+
+.premium-table tbody tr.selected-row {
+  background: rgba(99, 102, 241, 0.03);
+  border-left: 2px solid var(--primary);
 }
 
 /* Badges */
@@ -636,10 +642,10 @@ body {
 
 .status-badge.not-contacted { background: rgba(107, 114, 128, 0.12); color: #9ca3af; border: 1px solid rgba(107, 114, 128, 0.2); }
 .status-badge.connected { background: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.2); }
-.status-badge.drafted { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.2); }
-.status-badge.sent { background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); }
+.status-badge.email-drafted { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.2); }
+.status-badge.email-sent { background: rgba(99, 102, 241, 0.12); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); }
 .status-badge.replied { background: rgba(6, 182, 212, 0.12); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.2); }
-.status-badge.interview { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
+.status-badge.interview-scheduled { background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.2); }
 .status-badge.offer { background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2)); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.35); animation: pulse-green 2s infinite; }
 
 @keyframes pulse-green {
