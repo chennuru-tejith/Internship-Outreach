@@ -54,12 +54,12 @@ export default function Contacts({
   const [showAddEditModal, setShowAddEditModal] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
   
-  // AI Draft modal state
   const [showAiModal, setShowAiModal] = useState(false);
   const [aiContact, setAiContact] = useState(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
   const [generating, setGenerating] = useState(false);
   const [aiPromptCustom, setAiPromptCustom] = useState('');
+  const [useSearchGrounding, setUseSearchGrounding] = useState(false);
 
   // Bulk sender state (reviewing drafted emails sequentially)
   const [bulkContacts, setBulkContacts] = useState([]);
@@ -371,6 +371,7 @@ export default function Contacts({
   const handleOpenAiModal = (contact) => {
     setAiContact(contact);
     setAiPromptCustom('');
+    setUseSearchGrounding(false);
     if (templates.length > 0) {
       setSelectedTemplateId(templates[0].id);
     }
@@ -378,7 +379,7 @@ export default function Contacts({
   };
 
   // Compile template context (supports both local/API flows)
-  const generateSingleDraftContext = async (contact, templateId, customInstruction = '') => {
+  const generateSingleDraftContext = async (contact, templateId, customInstruction = '', searchGrounding = false) => {
     const template = templates.find(t => t.id === templateId) || templates[0];
     
     // Check if key is missing and fall back
@@ -390,6 +391,11 @@ export default function Contacts({
       const compiled = compileLocalTemplate(template, contact, profile);
       return { subject: compiled.subject, body: compiled.body, wasFallback: needsFallback };
     }
+
+    // Google Search Grounding Prompt Additions
+    const groundingContext = searchGrounding 
+      ? `Search the internet for public information, LinkedIn profile details, articles, or news about ${contact.name} at company ${contact.company}. Use this context to personalize the outreach body to reference their specific achievements or recent projects.`
+      : '';
 
     const prompt = `
       You are writing a personalized outreach email for an internship.
@@ -407,6 +413,8 @@ export default function Contacts({
       - Resume/Qualifications context: ${resumeText || 'None supplied'}
       - Custom Placeholders context: ${JSON.stringify(customPlaceholders)}
 
+      ${groundingContext}
+
       Use this template as inspiration but rewrite it to sound natural, personalized, direct, and non-generic.
       If the sender has supplied resume context, analyze it and pick 1 or 2 relevant achievements, skills, or projects and reference them naturally in the email body (instead of generic placeholders). Keep the pitch short, punchy, and direct.
 
@@ -419,19 +427,35 @@ export default function Contacts({
     `;
 
     if (isGemini) {
+      const requestBody = {
+        contents: [{ parts: [{ text: prompt }] }]
+      };
+
+      if (searchGrounding) {
+        requestBody.tools = [
+          {
+            googleSearchRetrieval: {}
+          }
+        ];
+      } else {
+        requestBody.generationConfig = { responseMimeType: "application/json" };
+      }
+
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: "application/json" }
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
       const data = await response.json();
       const text = data.candidates[0].content.parts[0].text;
-      return JSON.parse(text);
+      
+      let cleaned = text.trim();
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+      }
+      return JSON.parse(cleaned);
     } else {
       // OpenAI
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -459,7 +483,7 @@ export default function Contacts({
   const handleGenerateAiMessage = async () => {
     setGenerating(true);
     try {
-      const result = await generateSingleDraftContext(aiContact, selectedTemplateId, aiPromptCustom);
+      const result = await generateSingleDraftContext(aiContact, selectedTemplateId, aiPromptCustom, useSearchGrounding);
       setContacts(contacts.map(c => {
         if (c.id === aiContact.id) {
           return {
@@ -1118,6 +1142,21 @@ export default function Contacts({
                     onChange={(e) => setAiPromptCustom(e.target.value)}
                     disabled={generating}
                   />
+                </div>
+              )}
+
+              {aiProvider === 'gemini' && !generating && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border)', borderRadius: '8px', marginTop: '12px' }}>
+                  <input 
+                    type="checkbox"
+                    id="search_grounding_cb"
+                    checked={useSearchGrounding}
+                    onChange={(e) => setUseSearchGrounding(e.target.checked)}
+                    style={{ cursor: 'pointer' }}
+                  />
+                  <label htmlFor="search_grounding_cb" style={{ fontSize: '0.8rem', fontWeight: 500, cursor: 'pointer', margin: 0 }}>
+                    💡 Search Online (Enable Google Search grounding context)
+                  </label>
                 </div>
               )}
 
