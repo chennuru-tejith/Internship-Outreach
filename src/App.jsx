@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Users, Briefcase, Mail, BarChart3, 
-  Upload, Settings as SettingsIcon, AlertCircle, ShieldAlert, Search, FileText 
+  Upload, Settings as SettingsIcon, AlertCircle, ShieldAlert, Search, FileText, Kanban 
 } from 'lucide-react';
 
 import Dashboard from './components/Dashboard';
@@ -13,6 +13,7 @@ import CSVImporter from './components/CSVImporter';
 import Settings from './components/Settings';
 import LeadFinder from './components/LeadFinder';
 import ResumeAnalyzer from './components/ResumeAnalyzer';
+import Pipeline from './components/Pipeline';
 
 import { initialCompanies, initialContacts, initialTemplates } from './mockData';
 
@@ -213,6 +214,12 @@ export default function App() {
               <Users /> Contacts
             </li>
             <li 
+              className={`sidebar-item ${selectedTab === 'pipeline' ? 'active' : ''}`}
+              onClick={() => setSelectedTab('pipeline')}
+            >
+              <Kanban /> Outreach Pipeline
+            </li>
+            <li 
               className={`sidebar-item ${selectedTab === 'finder' ? 'active' : ''}`}
               onClick={() => setSelectedTab('finder')}
             >
@@ -312,6 +319,14 @@ export default function App() {
             globalBcc={globalBcc}
           />
         )}
+        {selectedTab === 'pipeline' && (
+          <Pipeline 
+            contacts={contacts} 
+            setContacts={setContacts} 
+            setTab={handleSetTab} 
+            setSelectedContactForEmail={setSelectedContactForEmail}
+          />
+        )}
         {selectedTab === 'finder' && (
           <LeadFinder 
             contacts={contacts} 
@@ -323,6 +338,10 @@ export default function App() {
           <ResumeAnalyzer 
             resumeText={resumeText} 
             setResumeText={setResumeText} 
+            aiProvider={aiProvider}
+            apiKey={apiKey}
+            geminiApiKey={geminiApiKey}
+            openAiModel={openAiModel}
           />
         )}
         {selectedTab === 'companies' && (
