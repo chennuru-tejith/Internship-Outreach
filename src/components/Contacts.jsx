@@ -292,7 +292,15 @@ export default function Contacts({
 
   // Gmail API Direct send mechanism (no tabs opened!)
   const sendDirectEmail = async (to, subject, body, token, cc = '', bcc = '') => {
-    const utf8Subject = `=?utf-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`;
+    const toBase64 = (str) => {
+      return btoa(
+        encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
+          return String.fromCharCode(parseInt(p1, 16));
+        })
+      );
+    };
+
+    const utf8Subject = `=?utf-8?B?${toBase64(subject)}?=`;
     const emailLines = [
       `To: ${to}`,
       cc ? `Cc: ${cc}` : '',
@@ -306,7 +314,7 @@ export default function Contacts({
     ].filter(Boolean);
 
     const email = emailLines.join('\r\n');
-    const base64Safe = btoa(unescape(encodeURIComponent(email)))
+    const base64Safe = toBase64(email)
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
       .replace(/=+$/, '');
