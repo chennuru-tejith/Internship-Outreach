@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText, Sparkles, AlertCircle, CheckCircle, TrendingUp, HelpCircle, Award, MessageSquare, ShieldAlert } from 'lucide-react';
+import { FileText, Sparkles, AlertCircle, CheckCircle, TrendingUp, HelpCircle, Award, MessageSquare } from 'lucide-react';
 
 export default function ResumeAnalyzer({ 
   resumeText, 
@@ -9,13 +9,18 @@ export default function ResumeAnalyzer({
   geminiApiKey = '',
   openAiModel = 'gpt-4o-mini'
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('audit'); // 'audit' | 'coach'
+  const [activeSubTab, setActiveSubTab] = useState('audit'); // 'audit' | 'coach' | 'pitch'
   
   // AI Coach state variables
   const [targetRole, setTargetRole] = useState('Software Engineer');
   const [targetCompany, setTargetCompany] = useState('Stripe');
   const [coachQuestions, setCoachQuestions] = useState([]);
   const [loadingCoach, setLoadingCoach] = useState(false);
+
+  // Cold Pitch states
+  const [jobDescription, setJobDescription] = useState('');
+  const [pitchAssets, setPitchAssets] = useState(null); // { coverLetter, linkedinInvite, elevatorPitch }
+  const [loadingPitch, setLoadingPitch] = useState(false);
 
   // Core technical keywords dictionary
   const skillKeywords = {
@@ -241,14 +246,12 @@ export default function ResumeAnalyzer({
         if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`);
         const data = await response.json();
         const obj = JSON.parse(data.choices[0].message.content);
-        // Make sure it returns the array directly
         const arr = Array.isArray(obj) ? obj : obj.questions || Object.values(obj)[0] || [];
         setCoachQuestions(arr);
       }
     } catch (err) {
       console.error(err);
       alert(`AI Coach call failed: ${err.message}. Generating mock questions offline instead.`);
-      // Mock fallback
       setCoachQuestions([
         {
           question: `How would you explain the architecture of your React or web projects to an interviewer at ${targetCompany}?`,
@@ -263,6 +266,114 @@ export default function ResumeAnalyzer({
       ]);
     } finally {
       setLoadingCoach(false);
+    }
+  };
+
+  // --- Cold Pitch Generator ---
+  const handleGenerateColdPitch = async () => {
+    setLoadingPitch(true);
+
+    const isGemini = aiProvider === 'gemini';
+    const isOpenAi = aiProvider === 'openai';
+    const hasKey = (isGemini && geminiApiKey) || (isOpenAi && apiKey);
+
+    // Offline mode or missing keys fallback
+    if (aiProvider === 'local' || !hasKey) {
+      setTimeout(() => {
+        const detected = getDetectedSkills();
+        const techTags = detected.slice(0, 3).map(d => d.name);
+        const tech1 = techTags[0] || 'JavaScript';
+        const tech2 = techTags[1] || 'React';
+        
+        const coverLetter = `Dear Hiring Team at ${targetCompany},
+
+I am writing to express my interest in the ${targetRole} internship position. As a student developer with hands-on experience building projects in ${tech1} and ${tech2}, I have focused my studies on writing high-performance, modular code.
+
+In my independent projects, I developed web modules and set up structured database pipelines, improving performance metrics. I am highly interested in ${targetCompany}'s developer ecosystem, specifically how your team addresses scaling engineering challenges.
+
+Thank you for your time and consideration. I welcome the opportunity to discuss my qualifications further.
+
+Sincerely,
+[Your Name]`;
+
+        const linkedinInvite = `Hi! I saw you lead engineering teams at ${targetCompany}. I'm an internship applicant specializing in ${tech1} and ${tech2}. I'd love to connect to follow your engineering updates and product milestones!`;
+
+        const elevatorPitch = `Hi, I'm [Your Name]. I study Computer Science and specialize in building web systems using ${tech1} and ${tech2}. I've designed and shipped performance dashboard projects locally. I'm really excited about ${targetCompany}'s developer tools, and I'd love to learn more about what skills your team prioritizes for internships!`;
+
+        setPitchAssets({ coverLetter, linkedinInvite, elevatorPitch });
+        setLoadingPitch(false);
+      }, 1000);
+      return;
+    }
+
+    const prompt = `
+      You are an expert recruitment advisor. Write 3 outreach assets based on the candidate's resume context:
+      "${resumeText}"
+
+      Target Company: ${targetCompany}
+      Target Role: ${targetRole}
+      ${jobDescription ? `Job Description: "${jobDescription}"` : ''}
+
+      Provide:
+      1. A professional Cover Letter tailored to the company. Keep it punchy (under 250 words).
+      2. An optimized LinkedIn connection request invite note to recruiters/EMs. This invite note MUST be strictly under 300 characters (including spaces). Keep it short and polite.
+      3. A 30-second spoken elevator pitch for career fairs.
+
+      Return your response as a valid JSON object ONLY. Make sure it contains exactly three keys: "coverLetter", "linkedinInvite" (max 280 chars), and "elevatorPitch". Do not wrap the JSON in markdown code blocks or ticks.
+    `;
+
+    try {
+      if (isGemini) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        if (!response.ok) throw new Error(`Gemini API error: ${response.status}`);
+        const data = await response.json();
+        const text = data.candidates[0].content.parts[0].text;
+        
+        let cleaned = text.trim();
+        if (cleaned.startsWith('```')) {
+          cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
+        }
+        setPitchAssets(JSON.parse(cleaned));
+      } else {
+        // OpenAI
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: openAiModel || 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: 'You write customized job outreach documents in JSON format containing coverLetter, linkedinInvite (max 280 chars), and elevatorPitch keys.' },
+              { role: 'user', content: prompt }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+
+        if (!response.ok) throw new Error(`OpenAI API error: ${response.status}`);
+        const data = await response.json();
+        setPitchAssets(JSON.parse(data.choices[0].message.content));
+      }
+    } catch (err) {
+      console.error(err);
+      alert(`AI Pitch generation failed: ${err.message}. Compiling mock assets instead.`);
+      setPitchAssets({
+        coverLetter: `Dear Hiring Team,\n\nI am interested in joining ${targetCompany} as a ${targetRole}.`,
+        linkedinInvite: `Hi, I saw your engineering work at ${targetCompany}. I'd love to connect!`,
+        elevatorPitch: `Hi, I am interested in developer internships at ${targetCompany}.`
+      });
+    } finally {
+      setLoadingPitch(false);
     }
   };
 
@@ -311,6 +422,22 @@ export default function ResumeAnalyzer({
           }}
         >
           AI Interview Coach (Q&A Prep)
+        </button>
+        <button 
+          className={`btn-tab ${activeSubTab === 'pitch' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('pitch')}
+          style={{ 
+            background: 'transparent', 
+            border: 'none', 
+            color: activeSubTab === 'pitch' ? 'var(--primary)' : 'var(--text-secondary)', 
+            fontWeight: 600, 
+            fontSize: '0.9rem', 
+            cursor: 'pointer',
+            paddingBottom: '8px',
+            borderBottom: activeSubTab === 'pitch' ? '2px solid var(--primary)' : 'none'
+          }}
+        >
+          Cold Pitch Generator
         </button>
       </div>
 
@@ -449,7 +576,7 @@ export default function ResumeAnalyzer({
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeSubTab === 'coach' ? (
         /* AI Interview Coach Sub-view */
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div className="card-panel">
@@ -544,6 +671,166 @@ export default function ResumeAnalyzer({
               </div>
             )}
           </div>
+        </div>
+      ) : (
+        /* Cold Pitch Generator Sub-view */
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <div className="card-panel">
+            <h2 className="panel-title" style={{ marginBottom: '12px' }}>
+              <Sparkles size={18} style={{ color: 'var(--primary)' }} /> AI Cold Pitch & Cover Letter Generator
+            </h2>
+            <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+              Generate highly personalized Cover Letters, spoken Elevator Pitches, and copy-pasteable recruiter LinkedIn invitation notes.
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Target Role</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={targetRole}
+                  onChange={(e) => setTargetRole(e.target.value)}
+                  placeholder="e.g. Software Engineer"
+                />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label className="form-label">Target Company</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={targetCompany}
+                  onChange={(e) => setTargetCompany(e.target.value)}
+                  placeholder="e.g. Stripe"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Job Description / Requirements (Optional)</label>
+              <textarea 
+                className="form-textarea"
+                style={{ minHeight: '100px' }}
+                placeholder="Paste key responsibilities or skills mentioned in the job post to tailor your pitches..."
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+              />
+            </div>
+
+            <button 
+              type="button" 
+              className="btn btn-primary" 
+              style={{ display: 'flex', gap: '8px', alignItems: 'center' }}
+              onClick={handleGenerateColdPitch}
+              disabled={loadingPitch}
+            >
+              {loadingPitch ? (
+                <>
+                  <div className="ai-spinner" style={{ width: '12px', height: '12px' }} /> Generating pitches...
+                </>
+              ) : (
+                <>
+                  <Sparkles size={14} /> Generate Cold Pitch Assets
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Pitches outputs panels */}
+          {pitchAssets && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              
+              {/* Cover Letter */}
+              <div className="card-panel">
+                <h3 className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <span>✉️ Tailored Cover Letter Draft</span>
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(pitchAssets.coverLetter);
+                      alert('Cover Letter copied to clipboard!');
+                    }}
+                  >
+                    Copy Cover Letter
+                  </button>
+                </h3>
+                <textarea 
+                  className="form-textarea" 
+                  style={{ minHeight: '320px', background: 'rgba(0,0,0,0.1)', fontFamily: 'monospace', fontSize: '0.8rem', lineHeight: '1.4' }}
+                  readOnly
+                  value={pitchAssets.coverLetter}
+                />
+              </div>
+
+              {/* Grid for LinkedIn Note and Elevator Pitch */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                {/* LinkedIn Invitation Note */}
+                <div className="card-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h3 className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span>🔗 Recruiter LinkedIn Invite Note</span>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(pitchAssets.linkedinInvite);
+                        alert('LinkedIn Invite Note copied to clipboard!');
+                      }}
+                    >
+                      Copy Note
+                    </button>
+                  </h3>
+                  <textarea 
+                    className="form-textarea" 
+                    style={{ minHeight: '120px', background: 'rgba(0,0,0,0.1)', fontSize: '0.8rem', lineHeight: '1.4' }}
+                    readOnly
+                    value={pitchAssets.linkedinInvite}
+                  />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '8px', fontSize: '0.72rem', color: pitchAssets.linkedinInvite.length > 300 ? 'var(--color-danger)' : 'var(--text-muted)' }}>
+                    <span>Character count: <strong>{pitchAssets.linkedinInvite.length}</strong> / 300</span>
+                    {pitchAssets.linkedinInvite.length <= 300 ? (
+                      <span style={{ color: 'var(--color-success)' }}>✅ Optimal Length</span>
+                    ) : (
+                      <span style={{ color: 'var(--color-danger)' }}>⚠️ Exceeds Invite limit</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Elevator Pitch */}
+                <div className="card-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+                  <h3 className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span>🗣️ 30-Second Elevator Pitch</span>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ fontSize: '0.75rem', padding: '4px 10px' }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(pitchAssets.elevatorPitch);
+                        alert('Elevator Pitch copied to clipboard!');
+                      }}
+                    >
+                      Copy Pitch
+                    </button>
+                  </h3>
+                  <textarea 
+                    className="form-textarea" 
+                    style={{ minHeight: '120px', background: 'rgba(0,0,0,0.1)', fontSize: '0.8rem', lineHeight: '1.4', fontStyle: 'italic' }}
+                    readOnly
+                    value={pitchAssets.elevatorPitch}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                    Perfect for speaking at career fairs or virtual networking rooms.
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {!pitchAssets && !loadingPitch && (
+            <div className="card-panel" style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-muted)' }}>
+              <HelpCircle size={32} style={{ marginBottom: '10px' }} />
+              <p style={{ fontSize: '0.85rem' }}>No cold pitch assets compiled yet. Click "Generate Cold Pitch Assets" to write Cover Letters, elevator pitches, and invites.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
