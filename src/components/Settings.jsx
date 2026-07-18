@@ -27,6 +27,12 @@ export default function Settings({
   setGlobalBcc,
   customPlaceholders,
   setCustomPlaceholders,
+  emailFont,
+  setEmailFont,
+  emailLineHeight,
+  setEmailLineHeight,
+  emailSignature,
+  setEmailSignature,
   contacts,
   companies,
   templates,
@@ -48,6 +54,10 @@ export default function Settings({
   const [localGlobalCc, setLocalGlobalCc] = useState(globalCc);
   const [localGlobalBcc, setLocalGlobalBcc] = useState(globalBcc);
   const [localPlaceholders, setLocalPlaceholders] = useState([...customPlaceholders]);
+  const [localEmailFont, setLocalEmailFont] = useState(emailFont);
+  const [localEmailLineHeight, setLocalEmailLineHeight] = useState(emailLineHeight);
+  const [localEmailSignature, setLocalEmailSignature] = useState(emailSignature);
+
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [saved, setSaved] = useState(false);
@@ -65,6 +75,9 @@ export default function Settings({
     setGlobalCc(localGlobalCc);
     setGlobalBcc(localGlobalBcc);
     setCustomPlaceholders(localPlaceholders);
+    setEmailFont(localEmailFont);
+    setEmailLineHeight(localEmailLineHeight);
+    setEmailSignature(localEmailSignature);
     
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
@@ -108,7 +121,6 @@ export default function Settings({
       alert('Please enter both placeholder tag name and value.');
       return;
     }
-    // Auto-wrap in brackets if missing
     if (!cleanKey.startsWith('[')) cleanKey = '[' + cleanKey;
     if (!cleanKey.endsWith(']')) cleanKey = cleanKey + ']';
 
@@ -142,7 +154,10 @@ export default function Settings({
       aiProvider: localProvider,
       openAiModel: localModel,
       apiKey: localOpenAiKey,
-      geminiApiKey: localGeminiKey
+      geminiApiKey: localGeminiKey,
+      emailFont: localEmailFont,
+      emailLineHeight: localEmailLineHeight,
+      emailSignature: localEmailSignature
     };
 
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
@@ -158,7 +173,7 @@ export default function Settings({
     const file = e.target.files[0];
     if (!file) return;
 
-    if (!window.confirm('WARNING: Importing this backup will overwrite all your current leads, target companies, and configuration settings in local storage. Do you want to proceed?')) {
+    if (!window.confirm('WARNING: Importing this backup will overwrite all your current leads, target companies, and configuration settings. Do you want to proceed?')) {
       return;
     }
 
@@ -167,7 +182,6 @@ export default function Settings({
       try {
         const data = JSON.parse(event.target.result);
         
-        // Hydrate React states & triggers localStorage updates
         if (data.contacts) {
           setContacts(data.contacts);
           localStorage.setItem('crm_contacts', JSON.stringify(data.contacts));
@@ -224,6 +238,18 @@ export default function Settings({
           setGeminiApiKey(data.geminiApiKey);
           localStorage.setItem('crm_gemini_api_key', data.geminiApiKey);
         }
+        if (data.emailFont) {
+          setEmailFont(data.emailFont);
+          localStorage.setItem('crm_email_font', data.emailFont);
+        }
+        if (data.emailLineHeight) {
+          setEmailLineHeight(data.emailLineHeight);
+          localStorage.setItem('crm_email_line_height', data.emailLineHeight);
+        }
+        if (data.emailSignature) {
+          setEmailSignature(data.emailSignature);
+          localStorage.setItem('crm_email_signature', data.emailSignature);
+        }
 
         alert('Outreach CRM database successfully restored! Reloading page...');
         window.location.reload();
@@ -235,7 +261,7 @@ export default function Settings({
   };
 
   const handleReset = () => {
-    if (window.confirm('WARNING: This will clear all your custom contacts, companies, and templates, resetting the local database to the default demo values. Do you want to proceed?')) {
+    if (window.confirm('WARNING: This will clear all your custom contacts, companies, and templates, resetting the local database. Do you want to proceed?')) {
       resetDatabase();
       alert('Database reset to defaults successfully.');
       window.location.reload();
@@ -380,7 +406,7 @@ export default function Settings({
         {/* Local compiler message */}
         {localProvider === 'local' && (
           <div style={{ background: 'rgba(255,255,255,0.02)', padding: '14px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-            <strong>Local Substitution Mode Active:</strong> This mode will compile your outreach drafts instantly on your machine for free, by replacing tags like <code>[Contact Name]</code>, <code>[Company Name]</code>, and <code>[Your Name]</code> with actual lead data. No internet or API keys are required.
+            <strong>Local Substitution Mode Active:</strong> This mode will compile your outreach drafts instantly on your machine for free, by replacing tags like <code>[Contact Name]</code>, <code>[Company Name]</code>, and <code>[Your Name]</code> with actual lead data.
           </div>
         )}
 
@@ -389,7 +415,7 @@ export default function Settings({
           <FileText size={18} /> Custom Template Placeholders
         </h2>
         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-          Create custom replacement values to substitute dynamic sections in your templates. Placeholders must be declared in brackets (e.g. <code>[GPA]</code> or <code>[Project Title]</code>).
+          Create custom replacement values to substitute dynamic sections in your templates. Placeholders must be declared in brackets (e.g. <code>[GPA]</code>).
         </p>
 
         {/* List of custom placeholders */}
@@ -449,6 +475,59 @@ export default function Settings({
           >
             <Plus size={14} /> Add
           </button>
+        </div>
+
+        {/* Email Typography & HTML Signatures Panel */}
+        <h2 className="panel-title" style={{ borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: '16px 0 0 0' }}>
+          <FileText size={18} /> Email Typography & Signatures (Outlook/Gmail)
+        </h2>
+        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+          Select your preferred font family, line-height (spacing), and signature to format the drafts. The Rich Text Copy engine will apply these styles directly for copy-pasting.
+        </p>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Font Family</label>
+            <select 
+              className="form-select"
+              value={localEmailFont}
+              onChange={(e) => setLocalEmailFont(e.target.value)}
+            >
+              <option value="Calibri, Helvetica, Arial, sans-serif">Calibri (Outlook Default)</option>
+              <option value="Arial, Helvetica, sans-serif">Arial</option>
+              <option value="'Segoe UI', Tahoma, Geneva, sans-serif">Segoe UI (Modern Windows)</option>
+              <option value="Georgia, 'Times New Roman', serif">Georgia (Premium Academic)</option>
+              <option value="'Times New Roman', Times, serif">Times New Roman</option>
+            </select>
+          </div>
+
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Line Spacing (Line Height)</label>
+            <select 
+              className="form-select"
+              value={localEmailLineHeight}
+              onChange={(e) => setLocalEmailLineHeight(e.target.value)}
+            >
+              <option value="1.15">1.15 (Compact)</option>
+              <option value="1.3">1.3 (Standard Outlook)</option>
+              <option value="1.45">1.45 (Optimal Readability)</option>
+              <option value="1.6">1.6 (Double-spaced look)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Email Signature</label>
+          <textarea 
+            className="form-textarea" 
+            style={{ minHeight: '90px' }}
+            placeholder="e.g. Best regards,\nTejith Chennuru\nComputer Science Student"
+            value={localEmailSignature}
+            onChange={(e) => setLocalEmailSignature(e.target.value)}
+          />
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '6px' }}>
+            Your signature is automatically appended to all local draft compilations and Rich Text copy buffers.
+          </span>
         </div>
 
         {/* Email Client & Default CC/BCC Configuration */}
@@ -533,7 +612,7 @@ export default function Settings({
           </span>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifySelf: 'stretch', justifyContent: 'space-between', background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)', width: '100%' }}>
           <div>
             <div style={{ fontSize: '0.9rem', fontWeight: 600 }}>Gmail API Connection</div>
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>

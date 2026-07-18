@@ -90,6 +90,19 @@ export default function App() {
     ];
   });
 
+  // Custom typography and signatures for rich client composition (Outlook/Gmail)
+  const [emailFont, setEmailFont] = useState(() => {
+    return localStorage.getItem('crm_email_font') || 'Calibri';
+  });
+
+  const [emailLineHeight, setEmailLineHeight] = useState(() => {
+    return localStorage.getItem('crm_email_line_height') || '1.3';
+  });
+
+  const [emailSignature, setEmailSignature] = useState(() => {
+    return localStorage.getItem('crm_email_signature') || 'Best regards,\nTejith Chennuru\nComputer Science Student';
+  });
+
   const [selectedTab, setSelectedTab] = useState('dashboard');
   const [selectedContactForEmail, setSelectedContactForEmail] = useState(null);
   const [statusFilter, setStatusFilter] = useState('All');
@@ -156,6 +169,18 @@ export default function App() {
     localStorage.setItem('crm_custom_placeholders', JSON.stringify(customPlaceholders));
   }, [customPlaceholders]);
 
+  useEffect(() => {
+    localStorage.setItem('crm_email_font', emailFont);
+  }, [emailFont]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_email_line_height', emailLineHeight);
+  }, [emailLineHeight]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_email_signature', emailSignature);
+  }, [emailSignature]);
+
   const resetDatabase = () => {
     localStorage.removeItem('crm_contacts');
     localStorage.removeItem('crm_companies');
@@ -171,6 +196,9 @@ export default function App() {
     localStorage.removeItem('crm_global_cc');
     localStorage.removeItem('crm_global_bcc');
     localStorage.removeItem('crm_custom_placeholders');
+    localStorage.removeItem('crm_email_font');
+    localStorage.removeItem('crm_email_line_height');
+    localStorage.removeItem('crm_email_signature');
   };
 
   const handleSetTab = (tab) => {
@@ -278,7 +306,7 @@ export default function App() {
             </div>
           )}
           <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textAlign: 'center', paddingBottom: '4px' }}>
-            Outreach Platform v1.4.0
+            Outreach Platform v1.6.0
           </div>
         </div>
       </aside>
@@ -307,6 +335,9 @@ export default function App() {
             profile={profile}
             resumeText={resumeText}
             customPlaceholders={customPlaceholders}
+            emailFont={emailFont}
+            emailLineHeight={emailLineHeight}
+            emailSignature={emailSignature}
             setTab={handleSetTab}
             selectedContactForEmail={selectedContactForEmail}
             setSelectedContactForEmail={setSelectedContactForEmail}
@@ -385,6 +416,12 @@ export default function App() {
             setResumeText={setResumeText}
             customPlaceholders={customPlaceholders}
             setCustomPlaceholders={setCustomPlaceholders}
+            emailFont={emailFont}
+            setEmailFont={setEmailFont}
+            emailLineHeight={emailLineHeight}
+            setEmailLineHeight={setEmailLineHeight}
+            emailSignature={emailSignature}
+            setEmailSignature={setEmailSignature}
             resetDatabase={resetDatabase}
             googleClientId={googleClientId}
             setGoogleClientId={setGoogleClientId}

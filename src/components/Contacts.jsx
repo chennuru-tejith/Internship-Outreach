@@ -43,7 +43,10 @@ export default function Contacts({
   emailClient,
   globalCc,
   globalBcc,
-  customPlaceholders
+  customPlaceholders,
+  emailFont,
+  emailLineHeight,
+  emailSignature
 }) {
   const [search, setSearch] = useState('');
   
@@ -97,6 +100,40 @@ export default function Contacts({
     const d = new Date();
     d.setDate(d.getDate() + 7);
     return d.toISOString().split('T')[0];
+  };
+
+  const handleCopyRichText = async (subject, bodyText) => {
+    const signatureHtml = emailSignature 
+      ? emailSignature.replace(/\n/g, '<br />')
+      : '';
+
+    const bodyHtml = bodyText.replace(/\n/g, '<br />');
+
+    const fullHtml = `
+      <div style="font-family: ${emailFont}; font-size: 11pt; line-height: ${emailLineHeight}; color: #000000; margin: 0;">
+        ${bodyHtml}
+        ${signatureHtml ? `<br /><br />${signatureHtml}` : ''}
+      </div>
+    `;
+
+    const fullPlainText = `${bodyText}${emailSignature ? `\n\n${emailSignature}` : ''}`;
+
+    try {
+      const blobHtml = new Blob([fullHtml], { type: 'text/html' });
+      const blobPlain = new Blob([fullPlainText], { type: 'text/plain' });
+      
+      const item = new ClipboardItem({
+        'text/html': blobHtml,
+        'text/plain': blobPlain
+      });
+
+      await navigator.clipboard.write([item]);
+      alert('Rich Text formatted email & signature successfully copied! You can now paste (Ctrl+V) directly into Outlook to preserve all fonts, line spacing, and signatures.');
+    } catch (err) {
+      console.error(err);
+      await navigator.clipboard.writeText(fullPlainText);
+      alert('Copied as plain text (Modern browser rich clipboard writing not supported on this browser version).');
+    }
   };
 
   // Compile local offline templates
@@ -1242,6 +1279,43 @@ export default function Contacts({
                       }}
                     />
                   </div>
+
+                  <div style={{ marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="form-label" style={{ margin: 0 }}>Visual Outlook Preview</label>
+                      <button 
+                        type="button"
+                        className="btn btn-secondary" 
+                        style={{ fontSize: '0.7rem', padding: '3px 8px', margin: 0 }}
+                        onClick={() => handleCopyRichText(bulkContacts[bulkIndex].emailDraftSubject, bulkContacts[bulkIndex].emailDraftBody)}
+                      >
+                        Copy Rich Text
+                      </button>
+                    </div>
+                    <div 
+                      style={{ 
+                        background: '#ffffff', 
+                        color: '#000000', 
+                        padding: '12px 14px', 
+                        borderRadius: '8px', 
+                        fontFamily: emailFont, 
+                        lineHeight: emailLineHeight, 
+                        fontSize: '13px', 
+                        minHeight: '140px', 
+                        maxHeight: '220px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border)',
+                        whiteSpace: 'pre-line'
+                      }}
+                    >
+                      {bulkContacts[bulkIndex].emailDraftBody}
+                      {emailSignature && (
+                        <div style={{ marginTop: '18px', borderTop: '1px dashed rgba(0,0,0,0.15)', paddingTop: '10px', fontSize: '12px', color: '#444444' }}>
+                          {emailSignature}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)' }}>
@@ -1446,6 +1520,43 @@ export default function Contacts({
                     setSelectedContactForEmail({ ...selectedContactForEmail, emailDraftBody: newBody });
                   }}
                 />
+              </div>
+
+              <div style={{ marginTop: '16px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Visual Outlook Preview</label>
+                  <button 
+                    type="button"
+                    className="btn btn-secondary" 
+                    style={{ fontSize: '0.7rem', padding: '3px 8px', margin: 0 }}
+                    onClick={() => handleCopyRichText(selectedContactForEmail.emailDraftSubject, selectedContactForEmail.emailDraftBody)}
+                  >
+                    Copy Rich Text
+                  </button>
+                </div>
+                <div 
+                  style={{ 
+                    background: '#ffffff', 
+                    color: '#000000', 
+                    padding: '12px 14px', 
+                    borderRadius: '8px', 
+                    fontFamily: emailFont, 
+                    lineHeight: emailLineHeight, 
+                    fontSize: '13px', 
+                    minHeight: '140px', 
+                    maxHeight: '220px',
+                    overflowY: 'auto',
+                    border: '1px solid var(--border)',
+                    whiteSpace: 'pre-line'
+                  }}
+                >
+                  {selectedContactForEmail.emailDraftBody}
+                  {emailSignature && (
+                    <div style={{ marginTop: '18px', borderTop: '1px dashed rgba(0,0,0,0.15)', paddingTop: '10px', fontSize: '12px', color: '#444444' }}>
+                      {emailSignature}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div className="modal-footer" style={{ justifyContent: 'flex-end', gap: '8px' }}>
