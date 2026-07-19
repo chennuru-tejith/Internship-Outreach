@@ -522,15 +522,15 @@ Sincerely,
         if (improvementTips.length === 0) improvementTips.push("Try introducing quantitative metrics (e.g. 'reduced latency by 20%') to sound result-oriented.");
 
         const result = {
-          scoreTechnical: Math.min(technical, 100),
-          scoreCommunication: Math.min(communication, 100),
-          scoreStar: Math.min(star, 100),
+          scoreTechnical: Number(technical),
+          scoreCommunication: Number(communication),
+          scoreStar: Number(star),
           positives: positiveMatches,
           improvements: improvementTips
         };
 
         setSimEvaluation(result);
-        setTotalSimScores([...totalSimScores, result]);
+        setTotalSimScores(prev => [...prev, result]);
         setCandidateResponse('');
         setLoadingEvaluation(false);
         setSimStatus('feedback');
@@ -557,7 +557,7 @@ Sincerely,
     `;
 
     try {
-      let result;
+      let rawResult;
       if (isGemini) {
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
           method: 'POST',
@@ -575,7 +575,7 @@ Sincerely,
         if (cleaned.startsWith('```')) {
           cleaned = cleaned.replace(/^```json\s*/, '').replace(/```$/, '').trim();
         }
-        result = JSON.parse(cleaned);
+        rawResult = JSON.parse(cleaned);
       } else {
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -595,11 +595,20 @@ Sincerely,
 
         if (!response.ok) throw new Error(`OpenAI evaluation error: ${response.status}`);
         const data = await response.json();
-        result = JSON.parse(data.choices[0].message.content);
+        rawResult = JSON.parse(data.choices[0].message.content);
       }
 
-      setSimEvaluation(result);
-      setTotalSimScores([...totalSimScores, result]);
+      // Normalize keys and coerce to numbers to avoid type coercion or layout bugs
+      const normalizedResult = {
+        scoreTechnical: Number(rawResult.scoreTechnical || rawResult.technicalScore || rawResult.techScore || 75),
+        scoreCommunication: Number(rawResult.scoreCommunication || rawResult.communicationScore || rawResult.commScore || 80),
+        scoreStar: Number(rawResult.scoreStar || rawResult.starScore || rawResult.star || 70),
+        positives: Array.isArray(rawResult.positives) ? rawResult.positives : ["Response answered the prompt with clarity."],
+        improvements: Array.isArray(rawResult.improvements) ? rawResult.improvements : ["Focus more on architectural choices and scaling configurations."]
+      };
+
+      setSimEvaluation(normalizedResult);
+      setTotalSimScores(prev => [...prev, normalizedResult]);
       setCandidateResponse('');
       setSimStatus('feedback');
     } catch (err) {
@@ -613,7 +622,7 @@ Sincerely,
         improvements: ["Focus more on architectural choices and scaling configurations."]
       };
       setSimEvaluation(fallbackResult);
-      setTotalSimScores([...totalSimScores, fallbackResult]);
+      setTotalSimScores(prev => [...prev, fallbackResult]);
       setCandidateResponse('');
       setSimStatus('feedback');
     } finally {
@@ -632,8 +641,8 @@ Sincerely,
 
     setSimQuestionIndex(nextIdx);
     setSimEvaluation(null);
-    setSimChatHistory([
-      ...simChatHistory,
+    setSimChatHistory(prev => [
+      ...prev,
       { type: 'interviewer', text: `Got it. Let us move to the next question: "${questions[nextIdx]}"` }
     ]);
     setSimStatus('active');
@@ -641,9 +650,9 @@ Sincerely,
 
   const getFinalScorecardSummary = () => {
     if (totalSimScores.length === 0) return { technical: 0, communication: 0, star: 0, overall: 0 };
-    const technical = Math.round(totalSimScores.reduce((acc, curr) => acc + curr.scoreTechnical, 0) / totalSimScores.length);
-    const communication = Math.round(totalSimScores.reduce((acc, curr) => acc + curr.scoreCommunication, 0) / totalSimScores.length);
-    const star = Math.round(totalSimScores.reduce((acc, curr) => acc + curr.scoreStar, 0) / totalSimScores.length);
+    const technical = Math.round(totalSimScores.reduce((acc, curr) => acc + (Number(curr.scoreTechnical) || 0), 0) / totalSimScores.length);
+    const communication = Math.round(totalSimScores.reduce((acc, curr) => acc + (Number(curr.scoreCommunication) || 0), 0) / totalSimScores.length);
+    const star = Math.round(totalSimScores.reduce((acc, curr) => acc + (Number(curr.scoreStar) || 0), 0) / totalSimScores.length);
     const overall = Math.round((technical + communication + star) / 3);
 
     return { technical, communication, star, overall };
